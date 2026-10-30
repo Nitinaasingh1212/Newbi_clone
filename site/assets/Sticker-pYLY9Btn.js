@@ -1,0 +1,1 @@
+import{j as e}from"./vendor-react-Df4CD_Gv.js";const n=t=>(Array.isArray(t)?t.flat(1/0):[t]).filter(r=>typeof r=="string"||typeof r=="number").join("");function i({children:t,subtle:s=!1,tilt:r}){const a=r??(s?"":"-rotate-[1.5deg]");return e.jsx("span",{className:`nb-sticker inline-block ${s?"nb-sticker-sm":""} ${a}`,"data-text":n(t),children:t})}export{i as S};

@@ -1,0 +1,1 @@
+const n={},e=((n==null?void 0:n.VITE_PUBLIC_SITE_URL)||"https://www.newbi.live").replace(/\/+$/,""),t=new Set(["newbi.live","www.newbi.live"]),r=()=>{var i;if(typeof window>"u"||!((i=window.location)!=null&&i.origin))return e;const{hostname:o,origin:w}=window.location;return t.has(o)?w:e};export{r as g};

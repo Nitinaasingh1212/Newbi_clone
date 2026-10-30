@@ -1,0 +1,1 @@
+import{R as o,j as s}from"./vendor-react-Df4CD_Gv.js";import{c as d}from"./ConsentBanner-BR82zPfF.js";const i=o.forwardRef(({className:r,children:a,...t},e)=>s.jsx("div",{ref:e,className:d("glass-card p-6 text-gray-900 dark:text-white transition-all duration-300 hover:border-black/10 dark:hover:border-white/30",r),...t,children:a}));i.displayName="Card";export{i as C};
