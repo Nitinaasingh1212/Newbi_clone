@@ -1,0 +1,9 @@
+{
+  "name": "newbi-clone",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "mirror": "node scripts/mirror.mjs"
+  }
+}
