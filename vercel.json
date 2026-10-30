@@ -1,0 +1,23 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "outputDirectory": "site",
+  "trailingSlash": false,
+  "functions": {
+    "api/forms.js": {
+      "includeFiles": "site/api/**"
+    }
+  },
+  "headers": [
+    {
+      "source": "/assets/(.*)",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/((?!api/|assets/|brand/|og/).*)",
+      "destination": "/concertzone/index.html"
+    }
+  ]
+}
