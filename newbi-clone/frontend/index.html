@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>newbi.live — We bring you the nights you remember</title>
+    <meta name="description" content="Concerts, college fests, brand activations and creator campaigns across India, planned, produced and run end to end by the Newbi crew." />
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://www.newbi.live/" />
+    <meta property="og:title" content="newbi.live — We bring you the nights you remember" />
+    <meta property="og:description" content="Concerts, college fests, brand activations and creator campaigns across India, planned, produced and run end to end by the Newbi crew." />
+    <meta property="og:site_name" content="newbi.live" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="newbi.live — We bring you the nights you remember" />
+    <meta name="twitter:description" content="Concerts, college fests, brand activations and creator campaigns across India, planned, produced and run end to end by the Newbi crew." />
+
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3e%3ccircle cx='50' cy='50' r='45' fill='%233DF03D'/%3e%3ctext x='50' y='65' font-family='sans-serif' font-size='42' font-weight='900' fill='%23000' text-anchor='middle'%3eN%3c/text%3e%3c/svg%3e" />
+
+    <!-- Fonts: Syne, Plus Jakarta Sans, Space Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@700;800;900&display=swap" rel="stylesheet" />
+
+    <!-- Dark Mode Initializer -->
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem('nb_theme');
+          var dark = saved === 'dark' || (!saved && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.classList.toggle('dark', !!dark);
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body class="bg-editorial-sand dark:bg-editorial-dark text-gray-950 dark:text-white transition-colors duration-200 antialiased selection:bg-neon-green selection:text-black">
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
