@@ -1,0 +1,99 @@
+// Endpoints used by everyone: service health, the city list, ranking rules and the leaderboard.
+import { configProblem } from './config.js';
+import { rankVolunteers, rankingRules } from './ranking.js';
+import { cityField, integer } from './validate.js';
+
+// "Rahul Kumar Sharma" -> "Rahul S." so volunteers don't see each other's full names.
+const shortName = (name) => {
+  const parts = name.split(' ');
+  return parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1][0]}.` : name;
+};
+
+export function commonRoutes(define, svc) {
+  const { config, db, store } = svc;
+
+  define('GET', '/health', { open: true, summary: 'Service status and setup warnings' }, () => {
+    const storage = store.describe();
+    const problem = configProblem(config);
+    const warnings = [];
+    if (problem) warnings.push(problem);
+    if (!config.adminApiKey) warnings.push('ADMIN_API_KEY is not set, so admin sign-in is disabled.');
+    if (!storage.persistent) {
+      warnings.push('No Redis configured: data is not kept between server instances or restarts. Set KV_REST_API_URL and KV_REST_API_TOKEN (Upstash Redis).');
+    }
+    if (config.production && config.otpDevMode) {
+      warnings.push('OTP_DEV_MODE is on: OTPs are returned in API responses, so anyone can sign in as any number. Set up Twilio and turn it off before real use.');
+    }
+    if (!config.otpDevMode && !svc.sendSms) warnings.push('No SMS provider is configured and OTP_DEV_MODE is off, so OTPs cannot be sent.');
+    return {
+      status: problem ? 'misconfigured' : 'ok',
+      storage: { kind: storage.kind, persistent: storage.persistent },
+      otpDelivery: config.otpDevMode ? 'dev-mode' : svc.sendSms ? 'sms' : 'unavailable',
+      today: svc.today(),
+      warnings,
+    };
+  });
+
+  define(
+    'GET',
+    '/cities',
+    { open: true, summary: 'Cities that have volunteers or events, with upcoming event counts' },
+    async () => {
+      const today = svc.today();
+      const cities = new Map();
+      const entry = (doc) => {
+        if (!cities.has(doc.cityKey)) cities.set(doc.cityKey, { city: doc.city, cityKey: doc.cityKey, upcomingEvents: 0 });
+        return cities.get(doc.cityKey);
+      };
+      for (const e of await db.all('events')) {
+        const c = entry(e);
+        if (e.status === 'open' && e.date >= today) c.upcomingEvents++;
+      }
+      for (const v of await db.all('volunteers')) entry(v);
+      return {
+        cities: [...cities.values()].sort((a, b) => b.upcomingEvents - a.upcomingEvents || a.city.localeCompare(b.city)),
+      };
+    },
+  );
+
+  define('GET', '/ranking/rules', { open: true, summary: 'How points, tiers and rank are calculated' }, () => ({
+    rules: rankingRules(),
+  }));
+
+  define(
+    'GET',
+    '/leaderboard',
+    { auth: 'any', summary: "Ranked volunteers. Volunteers default to their own city; ?city=all for everyone" },
+    async ({ query, auth }) => {
+      const isAdmin = auth.role === 'admin';
+      const cityParam = query.get('city')?.trim();
+      let scope = null; // null = all cities
+      if (cityParam && cityParam.toLowerCase() !== 'all') scope = cityField(cityParam);
+      else if (!cityParam && !isAdmin) scope = { city: auth.volunteer.city, cityKey: auth.volunteer.cityKey };
+      const limit = integer(query.get('limit'), 'limit', { min: 1, max: 200 }) ?? 50;
+
+      const snapshot = await svc.rankingSnapshot();
+      const pool = scope ? snapshot.volunteers.filter((v) => v.cityKey === scope.cityKey) : snapshot.volunteers;
+      const ranked = rankVolunteers(pool, snapshot.statsOf);
+      const row = ({ volunteer, stats, rank }) => ({
+        rank,
+        ...(isAdmin
+          ? { volunteerId: volunteer.id, name: volunteer.name }
+          : { name: shortName(volunteer.name), isYou: volunteer.id === auth.volunteer.id }),
+        city: volunteer.city,
+        tier: stats.tier,
+        points: stats.points,
+        completedEvents: stats.completedEvents,
+        averageRating: stats.averageRating,
+        reliability: stats.reliability,
+      });
+      const you = !isAdmin && ranked.find((e) => e.volunteer.id === auth.volunteer.id);
+      return {
+        scope: scope ? scope.city : 'All cities',
+        rankedVolunteers: ranked.length,
+        leaderboard: ranked.slice(0, limit).map(row),
+        ...(!isAdmin && { you: you ? row(you) : null }),
+      };
+    },
+  );
+}

@@ -4,6 +4,7 @@ import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { handleVolunteerApi } from './backend/volunteers/api.js';
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), 'site');
 const PORT = Number(process.env.PORT) || 3000;
@@ -63,9 +64,32 @@ async function handleApi(req, res, url) {
   return json(res, 200, { success: true, items: [] });
 }
 
+// Volunteer API (backend/volunteers), the same code the Vercel function in api/v1.js runs.
+async function handleV1(req, res, url) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > 1_000_000) return json(res, 413, { success: false, error: { code: 'too_large', message: 'Request body is too large.' } });
+    chunks.push(chunk);
+  }
+  const result = await handleVolunteerApi({
+    method: req.method,
+    path: url.pathname.slice('/api/v1'.length),
+    query: url.searchParams,
+    headers: req.headers,
+    body: Buffer.concat(chunks),
+    ip: req.socket.remoteAddress,
+  });
+  res.writeHead(result.status, result.headers);
+  res.end(result.body === null ? undefined : JSON.stringify(result.body));
+}
+
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
+    if (url.pathname === '/api/v1' || url.pathname.startsWith('/api/v1/')) return await handleV1(req, res, url);
+
     const path = decodeURIComponent(url.pathname);
 
     if (path.startsWith('/api/forms')) return await handleApi(req, res, url);

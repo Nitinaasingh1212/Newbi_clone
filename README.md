@@ -8,9 +8,24 @@ A local mirror of the newbi.live landing site (`/`, `/work`, `/creator`, `/conta
 npm start          # http://localhost:3000  (set PORT to change)
 ```
 
+## Volunteer API
+
+`/api/v1` is a backend for event volunteers:
+
+- Phone OTP sign-in and Aadhaar-backed registration.
+- Events shown by the volunteer's city.
+- Applications and coordinator ratings.
+- A points/tier ranking with city leaderboards.
+
+The code is in `backend/volunteers/`. See [docs/volunteer-api.md](docs/volunteer-api.md) for every endpoint and for the Vercel setup (Upstash Redis, `APP_SECRET`, `ADMIN_API_KEY`).
+
+```
+npm test           # end-to-end tests for the volunteer API
+```
+
 ## Deploy to Vercel
 
-Import the repo in Vercel (no build step needed). `vercel.json` serves `site/` as the output directory, routes `/api/forms` to the function in `api/forms.js`, and falls back to the app shell for unknown routes.
+Import the repo in Vercel (no build step needed). `vercel.json` serves `site/` as the output directory, routes `/api/forms` to the function in `api/forms.js`, rewrites `/api/v1/*` to the volunteer API function in `api/v1.js`, and falls back to the app shell for unknown routes.
 
 ## Re-download from the live site
 
