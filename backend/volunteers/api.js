@@ -12,6 +12,7 @@ import { HttpError, badRequest } from './validate.js';
 import { commonRoutes } from './routes-common.js';
 import { volunteerRoutes } from './routes-volunteer.js';
 import { adminRoutes } from './routes-admin.js';
+import { publicRoutes } from './routes-public.js';
 import { seedDemoData } from './demo-data.js';
 
 export const API_PREFIX = '/api/v1';
@@ -43,6 +44,7 @@ export function createVolunteerApi(options = {}) {
     endpoints: routes.map((r) => ({ method: r.method, path: API_PREFIX + (r.pattern === '/' ? '' : r.pattern), auth: r.auth, summary: r.summary })),
   }));
   commonRoutes(define, svc);
+  publicRoutes(define, svc);
   volunteerRoutes(define, svc);
   adminRoutes(define, svc);
 

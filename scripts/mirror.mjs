@@ -1,12 +1,12 @@
-// Mirrors the newbi.live landing site into ./site so it can be served locally.
+// Mirrors the newbi.live landing site into ./mirror/newbi (an archive, not served).
 // Usage: node scripts/mirror.mjs
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join, posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { applyVolunteerBanner } from './volunteer-banner.mjs';
 
 const ORIGIN = 'https://www.newbi.live';
-const OUT = join(dirname(fileURLToPath(import.meta.url)), '..', 'site');
+// Archived copy of newbi.live; not served (the site is site/, OSH Entertainment).
+const OUT = join(dirname(fileURLToPath(import.meta.url)), '..', 'mirror', 'newbi');
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36';
 const CONCURRENCY = 8;
 
@@ -109,8 +109,6 @@ async function main() {
   });
   console.log(`\nDone: ${seen.size} paths visited, ${failed.length} failed`);
   for (const f of failed) console.log('  fail', f);
-  // The fresh index.html no longer has our volunteer banner; put it back.
-  await applyVolunteerBanner();
 }
 
 main();

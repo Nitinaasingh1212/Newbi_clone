@@ -14,6 +14,10 @@ export class HttpError extends Error {
 export const badRequest = (code, message, details) => new HttpError(400, code, message, details);
 
 export const GENDERS = ['male', 'female', 'other', 'prefer_not_to_say'];
+export const CATEGORIES = ['Cultural', 'Technical', 'Workshop', 'Sports', 'Fest', 'Concert', 'Comedy', 'Activation'];
+
+export const slugify = (value) =>
+  String(value).toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
 
 const isBlank = (v) => v === undefined || v === null || (typeof v === 'string' && v.trim() === '');
 
@@ -102,8 +106,29 @@ export function imageUrl(value, field = 'image') {
   return v;
 }
 
-export function email(value) {
-  if (isBlank(value)) return null;
+// Ticket types for an event: [{ name, price (INR), description }] -> each also gets a stable id.
+export function tickets(value) {
+  if (isBlank(value)) return [];
+  if (!Array.isArray(value)) throw invalid('tickets', 'tickets must be a list like [{ "name": "General", "price": 299 }].');
+  if (value.length > 6) throw invalid('tickets', 'An event can have at most 6 ticket types.');
+  const ids = new Set();
+  return value.map((t, i) => {
+    if (!t || typeof t !== 'object' || Array.isArray(t)) throw invalid('tickets', `tickets[${i}] must be an object.`);
+    const name = text(t.name, `tickets[${i}].name`, { required: true, max: 60 });
+    let id = slugify(name) || `ticket-${i + 1}`;
+    while (ids.has(id)) id += '-x';
+    ids.add(id);
+    return {
+      id,
+      name,
+      description: text(t.description, `tickets[${i}].description`, { max: 120 }),
+      price: integer(t.price, `tickets[${i}].price`, { required: true, min: 0, max: 100000 }),
+    };
+  });
+}
+
+export function email(value, { required = false } = {}) {
+  if (isBlank(value)) return absent('email', required);
   const v = typeof value === 'string' ? value.trim().toLowerCase() : '';
   if (v.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) {
     throw badRequest('invalid_email', 'Enter a valid email address.', { field: 'email' });

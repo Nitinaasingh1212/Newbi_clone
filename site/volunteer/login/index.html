@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <script>(function(){try{var s=localStorage.getItem('osh_theme');var d=s?s==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.classList.toggle('dark',d)}catch(e){}})();</script>
+  <title>Sign In | OSH Entertainment</title>
+  <meta name="description" content="Sign in to your OSH volunteer account with your mobile number.">
+  <meta name="theme-color" content="#0D8F64">
+  <link rel="icon" href="/osh/img/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/osh/img/icon-180.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700;800&display=swap">
+  <link rel="stylesheet" href="/osh/osh.css">
+</head>
+<body>
+  <div id="site-header"></div>
+  <main id="main" class="page-glow">
+    <div class="container auth-wrap">
+      <div>
+        <span class="pill">OSH Volunteers</span>
+        <h1 style="margin-top:14px">Welcome back</h1>
+        <p class="lead">Sign in with the mobile number you registered with to see events in your city, your applications and your rank.</p>
+        <ul style="list-style:none;padding:0;margin:22px 0 0;display:grid;gap:12px" class="muted">
+          <li style="display:flex;gap:10px;align-items:center"><span class="green"><svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg></span>Apply to events in your city</li>
+          <li style="display:flex;gap:10px;align-items:center"><span class="green"><svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg></span>Track approvals, ratings and certificates</li>
+          <li style="display:flex;gap:10px;align-items:center"><span class="green"><svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg></span>Climb your city's leaderboard</li>
+        </ul>
+      </div>
+      <section class="card card-pad" aria-labelledby="signin-title">
+        <h2 id="signin-title">Sign In</h2>
+        <div id="signin-body"></div>
+      </section>
+    </div>
+  </main>
+  <div id="site-footer"></div>
+  <script src="/osh/app.js"></script>
+  <script src="/osh/pages/signin.js"></script>
+</body>
+</html>

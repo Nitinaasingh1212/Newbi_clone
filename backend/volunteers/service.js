@@ -127,6 +127,12 @@ export function eventView(e, { counts, admin = false, myApplication } = {}) {
     startTime: e.startTime,
     endTime: e.endTime,
     roles: e.roles,
+    category: e.category ?? null,
+    tags: e.tags ?? [],
+    highlights: e.highlights ?? [],
+    tickets: e.tickets ?? [],
+    // Cheapest ticket, or null when the event has no ticket types.
+    priceFrom: e.tickets?.length ? Math.min(...e.tickets.map((t) => t.price)) : null,
     image: e.image ?? null,
     imageCredit: e.imageCredit ?? null,
     imageCreditUrl: e.imageCreditUrl ?? null,
@@ -142,7 +148,19 @@ export function eventView(e, { counts, admin = false, myApplication } = {}) {
 }
 
 export function eventSummary(e) {
-  return { id: e.id, title: e.title, city: e.city, venue: e.venue, date: e.date, startTime: e.startTime, status: e.status, image: e.image ?? null };
+  return {
+    id: e.id,
+    title: e.title,
+    city: e.city,
+    venue: e.venue,
+    address: e.address ?? null,
+    date: e.date,
+    startTime: e.startTime,
+    endTime: e.endTime ?? null,
+    status: e.status,
+    category: e.category ?? null,
+    image: e.image ?? null,
+  };
 }
 
 export function applicationView(app, { event, volunteer, admin = false } = {}) {

@@ -5,8 +5,10 @@ import { LIMITS } from './config.js';
 import { keyedHash, safeEqual, signToken } from './tokens.js';
 import { applicationView, byEventDate, eventCounts, eventView, volunteerView } from './service.js';
 import {
+  CATEGORIES,
   HttpError,
   badRequest,
+  tickets,
   cityField,
   clockTime,
   imageUrl,
@@ -19,7 +21,10 @@ import {
   text,
 } from './validate.js';
 
-const EVENT_FIELDS = ['title', 'description', 'city', 'venue', 'address', 'date', 'startTime', 'endTime', 'roles', 'volunteersNeeded', 'status', 'image', 'imageCredit', 'imageCreditUrl'];
+const EVENT_FIELDS = [
+  'title', 'description', 'city', 'venue', 'address', 'date', 'startTime', 'endTime', 'roles', 'volunteersNeeded', 'status',
+  'image', 'imageCredit', 'imageCreditUrl', 'category', 'tags', 'highlights', 'tickets',
+];
 const EVENT_STATUSES = ['open', 'closed', 'completed', 'cancelled'];
 const APPLICATION_STATUSES = ['applied', 'approved', 'rejected', 'withdrawn', 'completed', 'no_show'];
 // Order applicants are listed in for an event: pending first, then the confirmed team.
@@ -44,6 +49,10 @@ function readEventFields(body, { creating }) {
   if (has('image')) out.image = imageUrl(body.image);
   if (has('imageCredit')) out.imageCredit = text(body.imageCredit, 'imageCredit', { max: 160 });
   if (has('imageCreditUrl')) out.imageCreditUrl = imageUrl(body.imageCreditUrl, 'imageCreditUrl');
+  if (has('category')) out.category = oneOf(body.category, 'category', CATEGORIES);
+  if (has('tags')) out.tags = stringList(body.tags, 'tags', { maxItems: 8, maxLength: 30 });
+  if (has('highlights')) out.highlights = stringList(body.highlights, 'highlights', { maxItems: 8, maxLength: 40 });
+  if (has('tickets')) out.tickets = tickets(body.tickets);
   return out;
 }
 
@@ -330,4 +339,32 @@ export function adminRoutes(define, svc) {
       return { volunteer: volunteerView(volunteer, { admin: true }) };
     },
   );
+
+  // ---- Ticket bookings and organiser enquiries --------------------------------------
+
+  define('GET', '/admin/events/:eventId/bookings', { auth: 'admin', summary: 'Ticket bookings for an event' }, async ({ params }) => {
+    const event = await svc.requireDoc('events', params.eventId, 'Event');
+    const bookings = (await db.all('bookings'))
+      .filter((b) => b.eventId === event.id)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return {
+      event: eventView(event, { admin: true }),
+      total: bookings.length,
+      byTicket: Object.values(
+        bookings.reduce((acc, b) => {
+          acc[b.ticket.id] ??= { ticket: b.ticket.name, bookings: 0, amount: 0 };
+          acc[b.ticket.id].bookings++;
+          acc[b.ticket.id].amount += b.amount;
+          return acc;
+        }, {}),
+      ),
+      bookings,
+    };
+  });
+
+  define('GET', '/admin/enquiries', { auth: 'admin', summary: 'Event enquiries from the Organize page, newest first' }, async ({ query }) => {
+    const enquiries = (await db.all('enquiries')).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const { limit, offset } = pagination(query);
+    return { total: enquiries.length, enquiries: enquiries.slice(offset, offset + limit) };
+  });
 }

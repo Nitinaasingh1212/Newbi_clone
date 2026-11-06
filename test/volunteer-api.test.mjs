@@ -386,6 +386,8 @@ test('demo login: fixed OTP and the same populated dashboard on every server cop
   assert.deepEqual(eventsA.events, eventsB.events);
   assert.deepEqual(eventsA.events.map((e) => [e.title, e.date, e.myApplication?.status ?? null, e.slotsLeft]), [
     ['Diwali Night Market', '2026-11-09', 'approved', 18],
+    ['Dandiya Night', '2026-11-12', null, 15],
+    ['Event Volunteering Workshop', '2026-11-14', null, 4],
     ['Campus Fest Pro Night', '2026-11-16', null, 30],
   ]);
   assert.equal(eventsA.events[0].image, '/volunteer/img/events/diwali.jpg');
@@ -414,12 +416,76 @@ test('demo login: fixed OTP and the same populated dashboard on every server cop
 
   // Real sign-ups still see the demo events in their city.
   const cities = (await b('GET', '/cities')).cities;
-  assert.ok(cities.some((c) => c.city === 'Delhi' && c.upcomingEvents === 2));
+  assert.ok(cities.some((c) => c.city === 'Delhi' && c.upcomingEvents === 4));
 
   // The next day the demo is rewritten with fresh dates.
   setDate('2026-11-07');
   const tomorrow = await a('GET', '/volunteer/events', { token: login.token });
   assert.equal(tomorrow.events[0].date, '2026-11-10');
+});
+
+test('public site: event listing, filters, ticket booking and organiser enquiries', async () => {
+  const { a, b } = demoCopies();
+
+  const all = await a('GET', '/events');
+  assert.equal(all.status, 200);
+  assert.equal(all.total, 14, 'every upcoming demo event, all cities');
+  assert.deepEqual(all.categories, ['Cultural', 'Technical', 'Workshop', 'Sports', 'Fest', 'Concert', 'Comedy', 'Activation']);
+  assert.ok(all.cities.includes('Delhi') && all.cities.includes('Bengaluru'));
+  assert.ok(all.events.every((e, i, list) => i === 0 || list[i - 1].date <= e.date), 'soonest first');
+  assert.ok(all.events.every((e) => e.image && e.category && e.tickets.length));
+
+  const tech = await a('GET', '/events', { query: { category: 'Technical' } });
+  assert.deepEqual(tech.events.map((e) => e.title), ['Tech Expo 2026', 'Code Rush Hackathon']);
+  assert.deepEqual((await a('GET', '/events', { query: { q: 'garba' } })).events.map((e) => e.title), ['Dandiya Night']);
+  assert.equal((await a('GET', '/events', { query: { city: 'Bombay' } })).events.length, 3);
+  assert.equal((await a('GET', '/events', { query: { category: 'Opera' } })).status, 400);
+
+  const detail = await b('GET', '/events/evt_demo_techfest');
+  assert.deepEqual(detail.event.tickets.map((x) => [x.id, x.price]), [['general-pass', 0], ['student-pass', 99], ['premium-pass', 299]]);
+  assert.deepEqual(detail.event.tags, ['Technology', 'Innovation', 'Exhibition']);
+  assert.deepEqual(detail.event.highlights, ['Live Demos', 'Expert Talks', 'Startup Zone', 'Networking']);
+  assert.equal(detail.event.priceFrom, 0);
+  assert.equal(detail.event.bookable, true);
+  assert.equal((await b('GET', '/events/evt_demo_holi')).event.bookable, false, 'past events cannot be booked');
+
+  const attendee = { name: 'Nitin Singh', email: 'nitin@example.com', phone: '98765 43210' };
+  const booking = await a('POST', '/events/evt_demo_techfest/bookings', { body: { ticketId: 'premium-pass', ...attendee } });
+  assert.equal(booking.status, 201);
+  assert.match(booking.booking.code, /^OSH-[A-HJ-NP-Z2-9]{6}$/);
+  assert.deepEqual([booking.booking.amount, booking.booking.payment, booking.booking.status], [299, 'simulated', 'confirmed']);
+  assert.equal(booking.booking.attendee.phone, '+919876543210');
+  assert.equal(booking.event.title, 'Tech Expo 2026');
+  const free = await a('POST', '/events/evt_demo_techfest/bookings', { body: { ticketId: 'general-pass', ...attendee } });
+  assert.equal(free.booking.payment, 'free');
+  assert.equal((await a('GET', `/bookings/${booking.booking.id}`)).booking.code, booking.booking.code);
+
+  assert.equal((await a('POST', '/events/evt_demo_techfest/bookings', { body: { ticketId: 'nope', ...attendee } })).error.code, 'invalid_ticket');
+  assert.equal((await a('POST', '/events/evt_demo_techfest/bookings', { body: { ticketId: 'general-pass', ...attendee, email: '' } })).error.code, 'missing_field');
+  assert.equal((await a('POST', '/events/evt_demo_holi/bookings', { body: { ticketId: 'x', ...attendee } })).error.code, 'bookings_closed');
+
+  const enquiry = await a('POST', '/organize/enquiries', {
+    body: { name: 'Priya Sharma', email: 'priya@college.edu', phone: '9123456780', organization: 'XYZ College', eventType: 'College fest', city: 'Lucknow', audience: '1,000 to 5,000', message: 'Two-day fest in March.' },
+  });
+  assert.equal(enquiry.status, 201);
+  assert.match(enquiry.enquiry.id, /^enq_/);
+  assert.equal((await a('POST', '/organize/enquiries', { body: { name: 'X', email: 'x@y.z', phone: '9123456780', eventType: 'Wedding', message: 'Hi' } })).status, 400);
+
+  const admin = await a('POST', '/admin/login', { body: { apiKey: 'newbi-admin-2026', name: 'Ops' } });
+  const adminBookings = await a('GET', '/admin/events/evt_demo_techfest/bookings', { token: admin.token });
+  assert.equal(adminBookings.total, 2);
+  assert.deepEqual(adminBookings.byTicket.map((x) => [x.ticket, x.bookings, x.amount]).sort(), [['General Pass', 1, 0], ['Premium Pass', 1, 299]]);
+  const enquiries = await a('GET', '/admin/enquiries', { token: admin.token });
+  assert.equal(enquiries.enquiries[0].organization, 'XYZ College');
+
+  // Admins can set the new event fields.
+  const created = await a('POST', '/admin/events', {
+    token: admin.token,
+    body: { title: 'Robotics Workshop', city: 'Lucknow', venue: 'Main Hall', date: '2026-11-20', volunteersNeeded: 5, category: 'Workshop', tags: ['Robotics'], highlights: ['Hands-on Kits'], tickets: [{ name: 'Student', price: 99 }, { name: 'Student', price: 149 }] },
+  });
+  assert.equal(created.status, 201);
+  assert.deepEqual(created.event.tickets.map((x) => x.id), ['student', 'student-x'], 'duplicate ticket names get distinct ids');
+  assert.equal((await a('POST', '/admin/events', { token: admin.token, body: { title: 'X', city: 'Delhi', venue: 'Y', date: '2026-11-20', volunteersNeeded: 1, tickets: [{ name: 'Free' }] } })).status, 400);
 });
 
 test('demo account can apply where storage is kept (local SQLite)', async () => {

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <script>(function(){try{var s=localStorage.getItem('osh_theme');var d=s?s==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.classList.toggle('dark',d)}catch(e){}})();</script>
+  <title>About | OSH Entertainment</title>
+  <meta name="description" content="OSH Entertainment brings events, volunteers and event management together on one platform.">
+  <meta name="theme-color" content="#0D8F64">
+  <link rel="icon" href="/osh/img/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/osh/img/icon-180.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700;800&display=swap">
+  <link rel="stylesheet" href="/osh/osh.css">
+</head>
+<body>
+  <div id="site-header"></div>
+  <main id="main" class="page-glow">
+    <section class="container hero" aria-labelledby="about-title">
+      <div>
+        <span class="pill">Events • Volunteers • Management</span>
+        <h1 id="about-title">We help young India <span class="green">show up</span>, and run the show</h1>
+        <p class="lead">OSH Entertainment brings three things together on one platform: events worth going to, volunteers who make them happen, and the management that ties it all together.</p>
+        <div class="hero-ctas"><a class="btn btn-lg" href="/events">Explore Events</a><a class="btn btn-outline btn-lg" href="/organize">Work with us</a></div>
+      </div>
+      <img src="/osh/img/volunteers.jpg" alt="A group of event volunteers in matching shirts" width="720" height="480" style="border-radius:26px;aspect-ratio:3/2;object-fit:cover;box-shadow:var(--shadow)">
+    </section>
+
+    <section class="container" aria-label="OSH in numbers"><div class="card stats-strip" id="stats"></div></section>
+
+    <section class="container section" aria-labelledby="what-title">
+      <div class="section-head"><div><span class="eyebrow">What we do</span><h2 id="what-title">Three sides of every great event</h2></div></div>
+      <div class="tiles" id="what"></div>
+    </section>
+
+    <section class="container section" aria-labelledby="values-title" style="padding-top:0">
+      <div class="section-head"><div><span class="eyebrow">How we work</span><h2 id="values-title">What we care about</h2></div></div>
+      <div class="tiles" id="values"></div>
+    </section>
+
+    <section class="container">
+      <div class="cta-band">
+        <div>
+          <h2>Be part of the next one</h2>
+          <p>Book a spot, sign up to volunteer, or bring us your event.</p>
+          <div class="hero-ctas" style="margin-top:22px"><a class="btn" href="/volunteer">Join as Volunteer</a><a class="btn btn-outline" href="/organize">Organize with OSH</a></div>
+        </div>
+        <img src="/volunteer/img/events/campus.jpg" alt="A crowd in front of a lit-up concert stage" width="720" height="480" loading="lazy">
+      </div>
+    </section>
+  </main>
+  <div id="site-footer"></div>
+  <script src="/osh/app.js"></script>
+  <script>
+    (function () {
+      var O = window.OSH;
+      document.getElementById('stats').innerHTML = [['calendarCheck', '500+', 'Events Organized'], ['users', '10,000+', 'Attendees'], ['heartHand', '2,500+', 'Volunteers'], ['handshake', '50+', 'Partner Organizations']]
+        .map(function (s) { return '<div class="stat-item">' + O.icon(s[0], 36) + '<div><b>' + s[1] + '</b><span>' + s[2] + '</span></div></div>'; }).join('');
+      var tile = function (t) { return '<article class="card tile"><span class="ico">' + O.icon(t[0], 24) + '</span><h3>' + t[1] + '</h3><p>' + t[2] + '</p></article>'; };
+      document.getElementById('what').innerHTML = [
+        ['calendar', 'Events', 'Concerts, fests, workshops and sports across Indian cities, with simple booking and instant confirmation.'],
+        ['users', 'Volunteers', 'A verified volunteer community that gets real experience, certificates and recognition for every shift.'],
+        ['building', 'Management', 'End-to-end planning and on-ground management for colleges, brands and organisers.'],
+      ].map(tile).join('');
+      document.getElementById('values').innerHTML = [
+        ['shield', 'Safety first', 'Every volunteer is identity-verified before their first event, and every shift has a coordinator.'],
+        ['award', 'Recognition that is earned', 'Points, tiers and ratings are transparent, so good work is visible.'],
+        ['pin', 'Local in every city', 'Volunteers see and work events in their own city.'],
+        ['sparkles', 'Experiences people remember', 'We sweat the details so audiences, artists and crews have a great night.'],
+      ].map(tile).join('');
+    })();
+  </script>
+</body>
+</html>

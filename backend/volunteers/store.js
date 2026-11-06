@@ -34,6 +34,8 @@ const SQLITE_TABLES = {
   volunteers: { name: '$.name', phone: '$.phone', city: '$.city', kyc_status: '$.kyc.status', status: '$.status', created_at: '$.createdAt' },
   events: { title: '$.title', city: '$.city', date: '$.date', status: '$.status', volunteers_needed: '$.volunteersNeeded', created_by: '$.createdBy' },
   applications: { event_id: '$.eventId', volunteer_id: '$.volunteerId', status: '$.status', preferred_role: '$.preferredRole', rating: '$.review.rating', applied_at: '$.appliedAt' },
+  bookings: { code: '$.code', event_id: '$.eventId', ticket: '$.ticket.name', amount: '$.amount', name: '$.attendee.name', email: '$.attendee.email', phone: '$.attendee.phone', created_at: '$.createdAt' },
+  enquiries: { name: '$.name', email: '$.email', phone: '$.phone', organization: '$.organization', event_type: '$.eventType', city: '$.city', created_at: '$.createdAt' },
 };
 
 export function sqliteStore(file) {
