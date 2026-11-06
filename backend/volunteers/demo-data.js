@@ -14,9 +14,35 @@ import { cityField, verhoeffValid } from './validate.js';
 
 export const DEMO_LOGIN = { phone: '+919999999999', otp: '123456' };
 
-const VERSION = 'v2'; // bump when the demo data changes, to rewrite it today
+const VERSION = 'v3'; // bump when the demo data changes, to rewrite it today
 const BY = 'Demo data';
 const NOTE = 'Demo event for the volunteer prototype.';
+
+// Event photos: freely licensed images from Wikimedia Commons, cropped to 720x480 and
+// stored in site/volunteer/img/events/<key>.jpg. Full credits: CREDITS.md in that folder.
+const PHOTOS = {
+  diwali: ['PattayaPatrol', 'CC BY-SA 4.0', 'DFC_2865_A_bustling_night_market_fills_the_street_with_crowds_food_stalls_and_decorative_lights_creating_a_festive_atmosphere.jpg'],
+  campus: ['PinkBeachPlanet', 'CC BY-SA 4.0', 'Beach-Please-2022-crowd-stage-lights-night-performance.jpg'],
+  indie: ['Shixart1985', 'CC BY 2.0', 'Live_rock_concert_featuring_musicians_playing_electric_guitars_on_stage_at_night_with_vibrant_lights_and_an_enthusiastic_crowd_present.jpg'],
+  popup: ['Robert Sheie', 'CC BY 2.0', 'Haxby_Collective_(24185585463).jpg'],
+  techfest: ['PattayaPatrol', 'CC BY-SA 4.0', 'DFC_4864_Night_market_vibes_at_Ban_Nong_Hin_crowds_food_stalls_and_live_music_bring_the_street_to_life_under_strings_of_lights.jpg'],
+  comedy: ['Carlos Delgado', 'CC BY-SA 3.0', 'Stand-up_comedy_-_Stage.jpg'],
+  edm: ['Shixart1985', 'CC BY 2.0', 'A_large_crowd_enjoys_a_music_concert_illuminated_by_colorful_lights_and_a_stunning_stage_display.jpg'],
+  cultural: ['Siddharth 36', 'CC BY-SA 4.0', 'Formational_dance_performance.jpg'],
+  carnival: ['PattayaPatrol', 'CC BY-SA 4.0', 'DSCF0642_Evening_buzz_at_a_colorful_outdoor_night_market_-_lights_food_stalls_and_crowds_enjoying_the_lively_atmosphere.jpg'],
+  beachrun: ['Stephen Craven', 'CC BY-SA 2.0', 'Marathon_runners_near_the_end_of_the_race_-_geograph.org.uk_-_6142899.jpg'],
+  holi: ['Piyush Choudhary', 'CC BY-SA 4.0', 'Himachali_people_covered_in_holi_colours,_dancing._01.jpg'],
+  spring: ['Shixart1985', 'CC BY 2.0', 'Live_band_performance_at_an_outdoor_concert_with_lights_and_energetic_crowd_during_nighttime.jpg'],
+  drop: ['Jacek Halicki', 'CC BY-SA 4.0', '2023_Adidas_Yeezy_350_V2_EF2905_(1).jpg'],
+};
+const photo = (key) => {
+  const [artist, license, file] = PHOTOS[key];
+  return {
+    image: `/volunteer/img/events/${key}.jpg`,
+    imageCredit: `Photo: ${artist}, ${license}, via Wikimedia Commons`,
+    imageCreditUrl: `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(file).replace(/%2C/g, ',')}`,
+  };
+};
 
 // inDays: days after today (India time). Past events are already completed.
 const EVENTS = [
@@ -97,6 +123,7 @@ export async function seedDemoData(svc) {
       ...rest,
       ...cityField(city, { required: true }),
       description: `${description} ${NOTE}`,
+      ...photo(key),
       date,
       status: inDays < 0 ? 'completed' : 'open',
       createdBy: BY,

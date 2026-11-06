@@ -127,6 +127,9 @@ export function eventView(e, { counts, admin = false, myApplication } = {}) {
     startTime: e.startTime,
     endTime: e.endTime,
     roles: e.roles,
+    image: e.image ?? null,
+    imageCredit: e.imageCredit ?? null,
+    imageCreditUrl: e.imageCreditUrl ?? null,
     volunteersNeeded: e.volunteersNeeded,
     ...(counts && { slotsLeft: Math.max(0, e.volunteersNeeded - counts.filled) }),
     status: e.status,
@@ -139,7 +142,7 @@ export function eventView(e, { counts, admin = false, myApplication } = {}) {
 }
 
 export function eventSummary(e) {
-  return { id: e.id, title: e.title, city: e.city, venue: e.venue, date: e.date, startTime: e.startTime, status: e.status };
+  return { id: e.id, title: e.title, city: e.city, venue: e.venue, date: e.date, startTime: e.startTime, status: e.status, image: e.image ?? null };
 }
 
 export function applicationView(app, { event, volunteer, admin = false } = {}) {

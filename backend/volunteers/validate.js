@@ -92,6 +92,16 @@ export function clockTime(value, field) {
   return value.trim();
 }
 
+// An https:// URL or a path on this site (e.g. /volunteer/img/events/diwali.jpg).
+export function imageUrl(value, field = 'image') {
+  if (isBlank(value)) return null;
+  const v = typeof value === 'string' ? value.trim() : '';
+  if (v.length > 500 || !(/^https:\/\/[^\s"'<>]+$/i.test(v) || /^\/[\w./-]+$/.test(v))) {
+    throw invalid(field, `${field} must be an https:// URL or a path on this site.`);
+  }
+  return v;
+}
+
 export function email(value) {
   if (isBlank(value)) return null;
   const v = typeof value === 'string' ? value.trim().toLowerCase() : '';

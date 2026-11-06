@@ -83,14 +83,21 @@ New volunteers start at `/volunteer`. Registered volunteers sign in at `/volunte
 
    The Aadhaar checksum is checked as they type. Only the last 4 digits are ever stored.
 3. **Use their dashboard:**
-   - **Events in their city.** They can apply with a preferred role, or withdraw.
-   - **Their applications,** with the coordinator's decision notes and star ratings.
+   - **Next shift:** the soonest event they're approved for, with a countdown and the coordinator's note. Clicking it jumps to the event.
+   - **Stats:** points, tier, city rank, events completed and average rating. Each card is clickable:
+     - Points and Tier open a breakdown of where every point came from.
+     - Rank opens the leaderboard and highlights their row.
+     - Events completed and Average rating open their history.
+   - **Tier ladder:** Bronze → Silver → Gold → Platinum, with their position marked.
+   - **Events in their city:** photo cards like the home page, showing date, status, spots left and a photo credit. They can apply with a preferred role, or withdraw.
+   - **Their applications:** each with a thumbnail, the coordinator's decision note and star rating.
    - **Their city leaderboard.**
-   - **Their stats:** points, tier, city rank, events completed and average rating.
    - **Change city.** This changes which events they see.
    - **Fix rejected details.** If the Aadhaar check is rejected, they can correct their name, date of birth or Aadhaar number and resubmit.
 
-The page follows the site's light/dark setting (`nb_theme`) and works on mobile.
+Every signed-out view has a **Sign in / Sign up** button in the header and a **New volunteer | Sign in** switch at the top of the card. The page follows the site's light/dark setting (`nb_theme`) and works on mobile.
+
+Event photos: admins set `image` on an event (an `https://` URL or a path on this site). The demo events use freely licensed photos from Wikimedia Commons in `site/volunteer/img/events/`, credited on each photo and in [`CREDITS.md`](site/volunteer/img/events/CREDITS.md) there. Events without a photo show a plain placeholder.
 
 There is no admin screen yet. Coordinators manage events, verify Aadhaar, approve applicants and rate volunteers through the admin endpoints in [docs/volunteer-api.md](docs/volunteer-api.md#admin--coordination-team).
 

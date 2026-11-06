@@ -293,11 +293,21 @@ This returns a 12-hour admin token. `name` is recorded on everything this admin 
   "startTime": "16:00",
   "endTime": "23:00",
   "roles": ["Entry gate", "Ticketing", "Backstage"],
-  "status": "open"
+  "status": "open",
+  "image": "https://res.cloudinary.com/<your-cloud>/image/upload/diwali-mela.jpg",
+  "imageCredit": "Photo: Newbi"
 }
 ```
 
 `title`, `city`, `venue`, `date` (today or later) and `volunteersNeeded` (1–5000) are required. Times use 24-hour `HH:MM`. `status` defaults to `open`.
+
+Optional photo fields, shown on the volunteer's event card:
+
+- `image`: an `https://` URL (e.g. a Cloudinary upload) or a path on this site, such as `/volunteer/img/events/diwali.jpg`. Anything else (`http:`, `javascript:` …) is rejected.
+- `imageCredit`: short credit text, up to 160 characters, e.g. `"Photo: Jane Doe, CC BY 4.0"`.
+- `imageCreditUrl`: where the credit links to (`https://` only).
+
+Events also return these three fields. Application summaries include `event.image` for thumbnails.
 
 The response includes `counts`: `{ applied, approved, rejected, withdrawn, completed, noShow, filled }`.
 

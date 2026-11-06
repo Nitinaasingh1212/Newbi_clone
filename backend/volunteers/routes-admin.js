@@ -9,6 +9,7 @@ import {
   badRequest,
   cityField,
   clockTime,
+  imageUrl,
   integer,
   isoDate,
   oneOf,
@@ -18,7 +19,7 @@ import {
   text,
 } from './validate.js';
 
-const EVENT_FIELDS = ['title', 'description', 'city', 'venue', 'address', 'date', 'startTime', 'endTime', 'roles', 'volunteersNeeded', 'status'];
+const EVENT_FIELDS = ['title', 'description', 'city', 'venue', 'address', 'date', 'startTime', 'endTime', 'roles', 'volunteersNeeded', 'status', 'image', 'imageCredit', 'imageCreditUrl'];
 const EVENT_STATUSES = ['open', 'closed', 'completed', 'cancelled'];
 const APPLICATION_STATUSES = ['applied', 'approved', 'rejected', 'withdrawn', 'completed', 'no_show'];
 // Order applicants are listed in for an event: pending first, then the confirmed team.
@@ -40,6 +41,9 @@ function readEventFields(body, { creating }) {
     out.volunteersNeeded = integer(body.volunteersNeeded, 'volunteersNeeded', { required: true, min: 1, max: 5000 });
   }
   if (has('status')) out.status = oneOf(body.status, 'status', EVENT_STATUSES, { required: !creating }) ?? 'open';
+  if (has('image')) out.image = imageUrl(body.image);
+  if (has('imageCredit')) out.imageCredit = text(body.imageCredit, 'imageCredit', { max: 160 });
+  if (has('imageCreditUrl')) out.imageCreditUrl = imageUrl(body.imageCreditUrl, 'imageCreditUrl');
   return out;
 }
 

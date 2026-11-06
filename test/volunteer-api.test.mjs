@@ -174,8 +174,13 @@ test('volunteers only see and apply to events in their own city', async () => {
   const admin = await adminToken();
 
   const mk = (body) => call('POST', '/admin/events', { token: admin, body });
-  const dEvent = await mk({ title: 'Diwali Mela', city: 'delhi', venue: 'JLN Stadium', date: '2026-11-10', startTime: '16:00', volunteersNeeded: 2, roles: ['Entry gate', 'Ticketing'] });
+  const dEvent = await mk({ title: 'Diwali Mela', city: 'delhi', venue: 'JLN Stadium', date: '2026-11-10', startTime: '16:00', volunteersNeeded: 2, roles: ['Entry gate', 'Ticketing'], image: 'https://res.cloudinary.com/demo/image/upload/sample.jpg' });
   assert.equal(dEvent.status, 201);
+  assert.equal(dEvent.event.image, 'https://res.cloudinary.com/demo/image/upload/sample.jpg');
+  for (const image of ['javascript:alert(1)', 'http://insecure.example/x.jpg', '"><script>']) {
+    const bad = await mk({ title: 'Bad image', city: 'Delhi', venue: 'X', date: '2026-11-20', volunteersNeeded: 1, image });
+    assert.equal(bad.status, 400, image);
+  }
   const mEvent = await mk({ title: 'Sunburn Warmup', city: 'Mumbai', venue: 'NSCI Dome', date: '2026-11-12', volunteersNeeded: 5 });
   await mk({ title: 'Old Delhi Walk', city: 'Delhi', venue: 'Red Fort', date: '2026-11-05', volunteersNeeded: 3 }).then((r) =>
     assert.equal(r.error.code, 'date_in_past'),
@@ -383,6 +388,9 @@ test('demo login: fixed OTP and the same populated dashboard on every server cop
     ['Diwali Night Market', '2026-11-09', 'approved', 18],
     ['Campus Fest Pro Night', '2026-11-16', null, 30],
   ]);
+  assert.equal(eventsA.events[0].image, '/volunteer/img/events/diwali.jpg');
+  assert.match(eventsA.events[0].imageCredit, /^Photo: .+, CC BY/);
+  assert.match(eventsA.events[0].imageCreditUrl, /^https:\/\/commons\.wikimedia\.org\/wiki\/File:/);
 
   const history = await b('GET', '/volunteer/applications', { token: login.token });
   assert.deepEqual(history.applications.map((x) => [x.event.title, x.status, x.review?.rating ?? null]), [
@@ -391,6 +399,7 @@ test('demo login: fixed OTP and the same populated dashboard on every server cop
     ['College Fest: Spring Edition', 'completed', 4],
     ['Holi Colour Fest', 'completed', 5],
   ]);
+  assert.equal(history.applications[3].event.image, '/volunteer/img/events/holi.jpg');
 
   const board = await a('GET', '/leaderboard', { token: login.token });
   assert.deepEqual(board.leaderboard.map((r) => [r.rank, r.name, r.points]), [
