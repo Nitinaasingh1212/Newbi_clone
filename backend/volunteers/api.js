@@ -12,6 +12,7 @@ import { HttpError, badRequest } from './validate.js';
 import { commonRoutes } from './routes-common.js';
 import { volunteerRoutes } from './routes-volunteer.js';
 import { adminRoutes } from './routes-admin.js';
+import { seedDemoEvents } from './demo-events.js';
 
 export const API_PREFIX = '/api/v1';
 
@@ -76,10 +77,22 @@ export function createVolunteerApi(options = {}) {
     'Access-Control-Max-Age': '86400',
   };
 
+  // Prototype demo events: checked once per server instance, before the first request.
+  let demoSeeding = null;
+  function ensureDemoEvents() {
+    if (!config.seedDemoEvents) return null;
+    demoSeeding ??= seedDemoEvents(svc).catch((err) => {
+      console.error('[volunteer-api] seeding demo events failed:', err);
+      demoSeeding = null; // try again on the next request
+    });
+    return demoSeeding;
+  }
+
   async function handle(req) {
     const headers = { ...baseHeaders };
     if (req.method === 'OPTIONS') return { status: 204, headers, body: null };
     try {
+      await ensureDemoEvents();
       const path = `/${String(req.path ?? '').replace(/^\/+|\/+$/g, '')}`;
       const candidates = routes.filter((r) => r.regex.test(path));
       if (!candidates.length) {

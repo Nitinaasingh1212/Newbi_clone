@@ -82,11 +82,11 @@ Any common Indian format works (`9876543210`, `09876543210`, `+91 98765-43210`).
   "expiresInSeconds": 300,
   "resendAfterSeconds": 30,
   "devOtp": "323037",
-  "devNote": "OTP_DEV_MODE is on, so the code is returned here instead of being sent by SMS."
+  "devNote": "OTP dev mode is on, so the code is returned here instead of being sent by SMS."
 }
 ```
 
-`devOtp` only appears while `OTP_DEV_MODE` is on (see [Setup](#setup)). With SMS configured, the code is texted instead.
+`devOtp` only appears in dev mode, which is the prototype default until Twilio is configured (see [Setup](#setup)). With SMS configured, the code is texted instead.
 
 Limits: one code per 30 s per number, 5 per hour per number, 30 per hour per IP. A code is valid for 5 minutes, allows 5 wrong guesses, and works once.
 
@@ -459,28 +459,39 @@ So a volunteer who typed "new delhi" sees events created for "Delhi". The aliase
 
 ## Setup
 
-### Environment variables
+### Prototype mode (the default)
 
-| Variable | Needed | Purpose |
-|---|---|---|
-| `APP_SECRET` | production | Signs tokens and keys the OTP/Aadhaar hashes. Use 32+ random characters, and never change it: changing it logs everyone out and breaks duplicate-Aadhaar detection. Generate one with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`. |
-| `ADMIN_API_KEY` | production | Password for `/admin/login`. |
-| `KV_REST_API_URL`, `KV_REST_API_TOKEN` | production | Upstash Redis (Vercel Marketplace → Upstash for Redis sets these). `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` also work. |
-| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` | for real SMS | Sends the OTP texts. Indian SMS needs a DLT-registered sender and template. |
-| `OTP_DEV_MODE` | optional | `true` returns the OTP in the API response instead of texting it. It is on by default locally when Twilio isn't set. In production it is off unless set. **Never leave it on for real users.** |
-| `CORS_ORIGIN` | optional | Allowed browser origin. The default is `*`. |
-| `VOLUNTEER_DB_FILE` | optional | File used when Redis isn't configured. The default is `data/volunteer-db.json`. |
+The API runs with no configuration, locally and on Vercel. These prototype values are hardcoded in `PROTOTYPE` in `backend/volunteers/config.js`:
 
-Locally, nothing is required: `npm start` uses a dev secret, admin key `dev-admin-key`, dev OTPs and `data/volunteer-db.json`.
+| Setting | Prototype value |
+|---|---|
+| `APP_SECRET` | A fixed random 64-character secret |
+| `ADMIN_API_KEY` | `newbi-admin-2026` |
+| OTP delivery | Dev mode: the OTP is returned in the API response and shown on the portal, until Twilio is configured |
+| Demo events | Two events each in Delhi, Mumbai and Bengaluru, and one each in Hyderabad, Pune, Kolkata and Chennai. They are added when there are no events at all, with dates a few days ahead. |
 
-### Vercel
+The prototype has three limits:
 
-1. Vercel → Project → Storage → add **Upstash for Redis** and connect it to the project. This sets `KV_REST_API_URL` and `KV_REST_API_TOKEN`.
-2. Settings → Environment Variables: add `APP_SECRET` and `ADMIN_API_KEY`. Add `OTP_DEV_MODE=true` for testing until Twilio is set up.
-3. Push to GitHub, or redeploy.
-4. Open `https://newbi-clone.vercel.app/api/v1/health`. `status` should be `ok`, and `warnings` lists anything still missing.
+- **No real security.** The repository is public, so anyone can read the admin key and the token secret. With the dev OTP, anyone can also sign in as any phone number. Don't collect real volunteers' details in this mode.
+- **No lasting storage.** Without Redis, Vercel keeps data in `/tmp`, which is wiped when the server instance restarts. That happens after a period without traffic, or on each deploy. Accounts and applications disappear, and the demo events come back with fresh dates. A volunteer whose account was wiped sees "Please sign in again" and has to register again.
+- **Possible OTP mismatches.** If Vercel ever runs two instances at once, they don't share data, so a code sent by one may be "expired" on the other.
 
-Without Redis, the deployed API falls back to a file in `/tmp`. Vercel wipes that file and doesn't share it between instances, so accounts and OTPs disappear at random. Treat that fallback as a smoke test only.
+### Moving off the prototype
+
+Environment variables override the hardcoded values, so no code change is needed:
+
+| Variable | Purpose |
+|---|---|
+| `KV_REST_API_URL`, `KV_REST_API_TOKEN` | Upstash Redis for lasting storage. Vercel → Storage → **Upstash for Redis** sets these. `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` also work. |
+| `APP_SECRET` | Your own 32+ random characters. Generate one with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`. Never change it once live: that logs everyone out and breaks duplicate-Aadhaar detection. |
+| `ADMIN_API_KEY` | Your own admin password for `/admin/login`. |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` | Real OTP texts. Setting these turns dev mode off. Indian SMS needs a DLT-registered sender and template. |
+| `OTP_DEV_MODE` | `true` or `false` forces dev mode on or off regardless of Twilio. |
+| `SEED_DEMO_EVENTS` | `false` stops adding demo events. |
+| `CORS_ORIGIN` | Allowed browser origin. The default is `*`. |
+| `VOLUNTEER_DB_FILE` | File used when Redis isn't configured. The default is `data/volunteer-db.json` locally and `/tmp/volunteer-db.json` on Vercel. |
+
+After changing variables in Vercel, redeploy. Then open `https://newbi-clone.vercel.app/api/v1/health`. `prototype` turns `false` once your own secrets are set, and `warnings` lists anything still missing.
 
 ### Tests
 

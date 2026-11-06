@@ -14,6 +14,7 @@ import vercelHandler from '../api/v1.js';
 
 // The Vercel handler builds its own API from env vars; keep its file store out of the repo.
 process.env.VOLUNTEER_DB_FILE = join(tmpdir(), 'newbi-volunteer-test-unused.json');
+process.env.SEED_DEMO_EVENTS = 'false';
 
 // Appends the Verhoeff check digit to an 11-digit prefix.
 function aadhaar(prefix) {
@@ -23,7 +24,7 @@ function aadhaar(prefix) {
 
 function setup() {
   let clock = new Date('2026-11-06T06:30:00Z'); // 12:00 in India
-  const config = { ...loadConfig({}), otpDevMode: true, adminApiKey: 'test-admin-key' };
+  const config = { ...loadConfig({}), otpDevMode: true, adminApiKey: 'test-admin-key', seedDemoEvents: false };
   const api = createVolunteerApi({ config, store: createMemoryStore(), sendSms: null, now: () => clock });
   const call = async (method, path, { body, token, query } = {}) => {
     const res = await api.handle({
@@ -318,6 +319,43 @@ test('withdrawing and re-applying, and event capacity edits', async () => {
   assert.equal(back.status, 201);
   assert.equal(back.application.id, first.application.id, 're-applying reuses the application');
   assert.equal(back.application.status, 'applied');
+});
+
+test('prototype defaults: hardcoded secrets, dev OTP, demo events seeded once', async () => {
+  const prod = loadConfig({ VERCEL: '1' });
+  assert.ok(prod.appSecret.length >= 32);
+  assert.equal(prod.adminApiKey, 'newbi-admin-2026');
+  assert.equal(prod.otpDevMode, true);
+  assert.equal(prod.usingPrototypeSecrets, true);
+  const overridden = loadConfig({ VERCEL: '1', APP_SECRET: 'x'.repeat(40), ADMIN_API_KEY: 'mine', OTP_DEV_MODE: 'false' });
+  assert.equal(overridden.adminApiKey, 'mine');
+  assert.equal(overridden.otpDevMode, false);
+  assert.equal(overridden.usingPrototypeSecrets, false);
+
+  const store = createMemoryStore();
+  const now = () => new Date('2026-11-06T06:30:00Z');
+  const config = { ...loadConfig({}), seedDemoEvents: true };
+  const api = createVolunteerApi({ config, store, sendSms: null, now });
+  const call = async (method, path, { body, token } = {}) =>
+    (await api.handle({ method, path, query: new URLSearchParams(), headers: token ? { authorization: `Bearer ${token}` } : {}, body: body && JSON.stringify(body) })).body;
+
+  const health = await call('GET', '/health');
+  assert.equal(health.status, 'ok');
+  const cities = (await call('GET', '/cities')).cities;
+  assert.ok(cities.some((c) => c.city === 'Delhi' && c.upcomingEvents === 2));
+  assert.ok(cities.some((c) => c.city === 'Bengaluru'));
+
+  const sent = await call('POST', '/auth/send-otp', { body: { phone: '9876543210' } });
+  const verified = await call('POST', '/auth/verify-otp', { body: { phone: '9876543210', otp: sent.devOtp } });
+  const reg = await call('POST', '/auth/register', { token: verified.registrationToken, body: profile() });
+  const events = await call('GET', '/volunteer/events', { token: reg.token });
+  assert.deepEqual(events.events.map((e) => e.title), ['Diwali Night Market', 'Campus Fest Pro Night']);
+  assert.deepEqual(events.events.map((e) => e.date), ['2026-11-09', '2026-11-16']);
+
+  // A second API instance on the same store (another server instance) doesn't seed again.
+  const again = createVolunteerApi({ config, store, sendSms: null, now });
+  await again.handle({ method: 'GET', path: '/health', headers: {} });
+  assert.equal(Object.keys(await store.hgetall('events')).length, 10);
 });
 
 test('router: 404, 405, bad JSON, bad tokens, endpoint index', async () => {

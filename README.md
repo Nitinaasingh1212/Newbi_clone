@@ -11,7 +11,7 @@ A mirror of the newbi.live landing site, plus a **volunteer portal**. Event volu
 | Volunteer API (lists every endpoint) | https://newbi-clone.vercel.app/api/v1 |
 | API setup check | https://newbi-clone.vercel.app/api/v1/health |
 
-The portal needs a few Vercel settings before people can sign up. See [Going live](#going-live). Until then it shows "Opening soon".
+This is a **prototype**. It works with no setup, using values hardcoded in the backend. See [Prototype mode](#prototype-mode) for what that means and how to move off it.
 
 ## What's in this repo
 
@@ -38,7 +38,8 @@ Open http://localhost:3000/volunteer to try the portal. Locally nothing needs co
 
 - **OTPs:** shown on screen instead of sent by SMS.
 - **Data:** goes to `data/volunteer-db.json`.
-- **Admin key:** `dev-admin-key`.
+- **Admin key:** `newbi-admin-2026`.
+- **Demo events:** a few per major city, so the dashboard has something to show.
 
 ## Volunteer portal
 
@@ -72,18 +73,34 @@ They sit outside the React app (`#landing-root`), so hydration never touches the
 - **To change the text or style,** edit `scripts/volunteer-banner.html` and run `node scripts/volunteer-banner.mjs`. It replaces the copy already in `site/index.html`.
 - **On a re-mirror,** `npm run mirror` puts the banner back automatically after downloading a fresh `index.html`.
 
-## Going live
+## Prototype mode
 
-The volunteer API refuses to run in production until it has secrets and real storage. In Vercel → this project:
+To make the prototype work without any Vercel setup, these are hardcoded in `PROTOTYPE` in [`backend/volunteers/config.js`](backend/volunteers/config.js):
 
-1. **Storage** → add **Upstash for Redis** and connect it. This sets `KV_REST_API_URL` and `KV_REST_API_TOKEN`. Without it, data lives in `/tmp` and disappears.
+| Setting | Prototype value |
+|---|---|
+| `APP_SECRET` | A fixed random secret |
+| `ADMIN_API_KEY` | `newbi-admin-2026`. Sign in with `POST /api/v1/admin/login` `{ "apiKey": "newbi-admin-2026", "name": "Your name" }`. |
+| OTP | Shown on screen instead of sent by SMS |
+| Demo events | Two each in Delhi, Mumbai and Bengaluru, and one each in Hyderabad, Pune, Kolkata and Chennai |
+
+The prototype has three limits:
+
+- **It isn't secure.** This repo is public, so anyone can read the admin key and token secret. With on-screen OTPs, anyone can sign in as any number. **Don't collect real volunteers' details yet.**
+- **Data doesn't last on Vercel.** Without a database, accounts and applications are wiped whenever the server restarts: after a quiet period, and on every deploy. The demo events come back with fresh dates.
+- **Redis can't be hardcoded.** Lasting storage needs an actual database, and creating one needs your Vercel login.
+
+### Moving off the prototype
+
+Set these in Vercel → this project, then **redeploy**. They override the hardcoded values, so no code change is needed:
+
+1. **Storage** → add **Upstash for Redis** and connect it. This sets `KV_REST_API_URL` and `KV_REST_API_TOKEN`, and data stops disappearing.
 2. **Settings → Environment Variables:**
-   - `APP_SECRET`: 32+ random characters. Generate one with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`. Never change it once live.
-   - `ADMIN_API_KEY`: password for `POST /api/v1/admin/login`.
-   - `OTP_DEV_MODE=true`: only while testing without SMS. It shows the OTP on screen, so **turn it off before real use**.
-   - For real SMS: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`. Indian SMS needs a DLT-registered sender.
-3. **Redeploy.** Environment variables only apply to new deployments.
-4. Open https://newbi-clone.vercel.app/api/v1/health. It should say `"status":"ok"`, and `warnings` lists anything missing.
+   - `APP_SECRET`: your own 32+ random characters. Generate one with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
+   - `ADMIN_API_KEY`: your own admin password.
+   - `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`: real SMS. This also turns on-screen OTPs off. Indian SMS needs a DLT-registered sender.
+   - `SEED_DEMO_EVENTS=false`: stops adding demo events.
+3. Open https://newbi-clone.vercel.app/api/v1/health. `prototype` becomes `false`, and `warnings` lists anything still missing.
 
 All variables are listed in [`.env.example`](.env.example).
 

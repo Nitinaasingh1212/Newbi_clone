@@ -19,14 +19,18 @@ export function commonRoutes(define, svc) {
     if (problem) warnings.push(problem);
     if (!config.adminApiKey) warnings.push('ADMIN_API_KEY is not set, so admin sign-in is disabled.');
     if (!storage.persistent) {
-      warnings.push('No Redis configured: data is not kept between server instances or restarts. Set KV_REST_API_URL and KV_REST_API_TOKEN (Upstash Redis).');
+      warnings.push('No Redis configured: accounts and events reset whenever the server restarts. Set KV_REST_API_URL and KV_REST_API_TOKEN (Upstash Redis) to keep them.');
+    }
+    if (config.production && config.usingPrototypeSecrets) {
+      warnings.push('Using the prototype APP_SECRET / ADMIN_API_KEY hardcoded in backend/volunteers/config.js. The repository is public, so set your own in Vercel before real volunteers sign up.');
     }
     if (config.production && config.otpDevMode) {
-      warnings.push('OTP_DEV_MODE is on: OTPs are returned in API responses, so anyone can sign in as any number. Set up Twilio and turn it off before real use.');
+      warnings.push('OTP dev mode is on: OTPs are shown in the API response, so anyone can sign in as any number. Set up Twilio before real use.');
     }
     if (!config.otpDevMode && !svc.sendSms) warnings.push('No SMS provider is configured and OTP_DEV_MODE is off, so OTPs cannot be sent.');
     return {
       status: problem ? 'misconfigured' : 'ok',
+      prototype: config.usingPrototypeSecrets,
       storage: { kind: storage.kind, persistent: storage.persistent },
       otpDelivery: config.otpDevMode ? 'dev-mode' : svc.sendSms ? 'sms' : 'unavailable',
       today: svc.today(),

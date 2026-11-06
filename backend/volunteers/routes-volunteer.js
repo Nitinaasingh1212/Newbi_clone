@@ -58,7 +58,7 @@ export function volunteerRoutes(define, svc) {
       resendAfterSeconds: LIMITS.otpResendSeconds,
       ...(result.devOtp && {
         devOtp: result.devOtp,
-        devNote: 'OTP_DEV_MODE is on, so the code is returned here instead of being sent by SMS.',
+        devNote: 'OTP dev mode is on, so the code is returned here instead of being sent by SMS.',
       }),
     };
   });

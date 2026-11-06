@@ -6,6 +6,18 @@ import { fileURLToPath } from 'node:url';
 
 const PROJECT_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
+// PROTOTYPE SETTINGS: hardcoded so the deployed prototype works with no Vercel setup.
+// This repository is public, so anyone can read these values and use them to sign in as an
+// admin or forge login tokens. Before real volunteers use the app, set APP_SECRET and
+// ADMIN_API_KEY (and Twilio for SMS) as Vercel environment variables. Those override
+// everything here, so no code change is needed.
+export const PROTOTYPE = {
+  appSecret: 'dbba0e17c020bb360b32e2bfb2dac8470a63a32b269ee4ade43653fba8d55ec8',
+  adminApiKey: 'newbi-admin-2026',
+  // Adds demo events in major cities whenever there are no events at all (see demo-events.js).
+  seedDemoEvents: true,
+};
+
 export const LIMITS = {
   otpTtlSeconds: 5 * 60,
   otpResendSeconds: 30,
@@ -33,12 +45,14 @@ export function loadConfig(env = process.env) {
   return {
     production,
     onVercel,
-    // Signs login tokens and keys the OTP/Aadhaar hashes. Local runs get a fixed dev value.
-    appSecret: env.APP_SECRET || (production ? null : 'local-dev-secret-not-for-production'),
-    adminApiKey: env.ADMIN_API_KEY || (production ? null : 'dev-admin-key'),
-    // Dev mode returns the OTP in the API response instead of sending an SMS. It is on by
-    // default locally when Twilio isn't set up; in production it has to be switched on.
-    otpDevMode: env.OTP_DEV_MODE ? env.OTP_DEV_MODE === 'true' : !production && !twilio,
+    // Signs login tokens and keys the OTP/Aadhaar hashes.
+    appSecret: env.APP_SECRET || PROTOTYPE.appSecret,
+    adminApiKey: env.ADMIN_API_KEY || PROTOTYPE.adminApiKey,
+    usingPrototypeSecrets: !env.APP_SECRET || !env.ADMIN_API_KEY,
+    // Dev mode returns the OTP in the API response instead of sending an SMS. It stays on
+    // until Twilio is configured, unless OTP_DEV_MODE says otherwise.
+    otpDevMode: env.OTP_DEV_MODE ? env.OTP_DEV_MODE === 'true' : !twilio,
+    seedDemoEvents: env.SEED_DEMO_EVENTS ? env.SEED_DEMO_EVENTS === 'true' : PROTOTYPE.seedDemoEvents,
     twilio,
     redis: redisUrl && redisToken ? { url: redisUrl.replace(/\/+$/, ''), token: redisToken } : null,
     dbFile:
