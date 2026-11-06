@@ -20,6 +20,10 @@
       "destination": "/api/v1?__path=:path*"
     },
     {
+      "source": "/volunteer/login",
+      "destination": "/volunteer/index.html"
+    },
+    {
       "source": "/((?!api/|assets/|brand/|og/).*)",
       "destination": "/concertzone/index.html"
     }

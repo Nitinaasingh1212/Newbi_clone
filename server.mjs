@@ -101,6 +101,8 @@ const server = createServer(async (req, res) => {
 
     if (await isFile(target)) return await send(res, target);
     if (await isFile(join(target, 'index.html'))) return await send(res, join(target, 'index.html'));
+    // The volunteer portal's sign-in page is the same page (vercel.json has the same rewrite).
+    if (path.replace(/\/+$/, '') === '/volunteer/login') return await send(res, join(ROOT, 'volunteer', 'index.html'));
     if (!extname(path)) return await send(res, APP_SHELL);
 
     res.writeHead(404, { 'Content-Type': 'text/plain' });

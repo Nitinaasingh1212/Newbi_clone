@@ -12,7 +12,7 @@ import { HttpError, badRequest } from './validate.js';
 import { commonRoutes } from './routes-common.js';
 import { volunteerRoutes } from './routes-volunteer.js';
 import { adminRoutes } from './routes-admin.js';
-import { seedDemoEvents } from './demo-events.js';
+import { seedDemoData } from './demo-data.js';
 
 export const API_PREFIX = '/api/v1';
 
@@ -61,7 +61,9 @@ export function createVolunteerApi(options = {}) {
     if (payload.role === 'admin') return { role: 'admin', admin: { name: payload.name } };
 
     const volunteer = await svc.db.get('volunteers', payload.sub);
-    if (!volunteer) throw new HttpError(401, 'unauthorized', 'This account no longer exists.');
+    if (!volunteer) {
+      throw new HttpError(401, 'account_not_found', "This volunteer account wasn't found on the server. Sign in again.");
+    }
     if (volunteer.status === 'suspended') {
       throw new HttpError(403, 'account_suspended', 'This volunteer account is suspended. Contact the coordination team.');
     }
@@ -77,14 +79,18 @@ export function createVolunteerApi(options = {}) {
     'Access-Control-Max-Age': '86400',
   };
 
-  // Prototype demo events: checked once per server instance, before the first request.
+  // Prototype demo data: written once per server instance per day, before requests run.
   let demoSeeding = null;
-  function ensureDemoEvents() {
-    if (!config.seedDemoEvents) return null;
-    demoSeeding ??= seedDemoEvents(svc).catch((err) => {
-      console.error('[volunteer-api] seeding demo events failed:', err);
-      demoSeeding = null; // try again on the next request
-    });
+  let demoSeededOn = null;
+  function ensureDemoData() {
+    if (!config.demoMode) return null;
+    if (demoSeededOn !== svc.today()) {
+      demoSeededOn = svc.today();
+      demoSeeding = seedDemoData(svc).catch((err) => {
+        console.error('[volunteer-api] writing demo data failed:', err);
+        demoSeededOn = null; // try again on the next request
+      });
+    }
     return demoSeeding;
   }
 
@@ -92,7 +98,7 @@ export function createVolunteerApi(options = {}) {
     const headers = { ...baseHeaders };
     if (req.method === 'OPTIONS') return { status: 204, headers, body: null };
     try {
-      await ensureDemoEvents();
+      await ensureDemoData();
       const path = `/${String(req.path ?? '').replace(/^\/+|\/+$/g, '')}`;
       const candidates = routes.filter((r) => r.regex.test(path));
       if (!candidates.length) {

@@ -8,10 +8,27 @@ A mirror of the newbi.live landing site, plus a **volunteer portal**. Event volu
 |---|---|
 | Landing page (with the "Volunteer with us" bar) | https://newbi-clone.vercel.app |
 | **Volunteer registration / portal** | **https://newbi-clone.vercel.app/volunteer** |
+| **Volunteer sign-in (with the demo account)** | **https://newbi-clone.vercel.app/volunteer/login** |
 | Volunteer API (lists every endpoint) | https://newbi-clone.vercel.app/api/v1 |
 | API setup check | https://newbi-clone.vercel.app/api/v1/health |
 
 This is a **prototype**. It works with no setup, using values hardcoded in the backend. See [Prototype mode](#prototype-mode) for what that means and how to move off it.
+
+## Demo account
+
+To see a filled-in volunteer dashboard without signing up, open the [sign-in page](https://newbi-clone.vercel.app/volunteer/login). Either click **Sign in as the demo volunteer**, or type the credentials:
+
+| Phone | OTP |
+|---|---|
+| `99999 99999` | `123456` |
+
+You're signed in as **Riya Kapoor**, a verified volunteer in Delhi. Her dashboard has:
+
+- **Stats:** 55 points, Silver tier, #2 of 5 in Delhi, three past events rated 5★, 4★ and 5★
+- **Upcoming events:** approved for Diwali Night Market, and Campus Fest Pro Night still open
+- **Leaderboard:** four other demo volunteers
+
+The demo data is rewritten each day with fresh dates. On the hosted site the demo is **view-only**: applying and changing city are switched off, because Vercel's copies of the API don't share storage. Locally (`npm start`), the demo account can do everything. `DEMO_MODE=false` turns the demo off. The demo is defined in [`backend/volunteers/demo-data.js`](backend/volunteers/demo-data.js).
 
 ## What's in this repo
 
@@ -30,6 +47,7 @@ This is a **prototype**. It works with no setup, using values hardcoded in the b
 ## Run locally
 
 ```
+npm install        # once: installs the SQLite driver (better-sqlite3)
 npm start          # http://localhost:3000  (set PORT to change)
 npm test           # volunteer API tests
 ```
@@ -37,13 +55,25 @@ npm test           # volunteer API tests
 Open http://localhost:3000/volunteer to try the portal. Locally nothing needs configuring:
 
 - **OTPs:** shown on screen instead of sent by SMS.
-- **Data:** goes to `data/volunteer-db.json`.
+- **Data:** stored in a **SQLite** database at `data/newbi.sqlite`. It survives restarts, and you can open it in any SQLite viewer, such as DB Browser for SQLite or the `sqlite3` CLI.
 - **Admin key:** `newbi-admin-2026`.
-- **Demo events:** a few per major city, so the dashboard has something to show.
+- **Demo data:** events in major cities, plus the [demo account](#demo-account) at http://localhost:3000/volunteer/login.
+
+### What's in the SQLite database
+
+| Table | Holds |
+|---|---|
+| `volunteers` | One row per volunteer, with `name`, `phone`, `city`, `kyc_status`, `status` and `created_at` columns. `doc` holds the full record. |
+| `events` | `title`, `city`, `date`, `status`, `volunteers_needed` and `created_by` columns, plus `doc` |
+| `applications` | `event_id`, `volunteer_id`, `status`, `preferred_role`, `rating` and `applied_at` columns, plus `doc` |
+| `kv` | Lookups: phone → volunteer, Aadhaar hash → volunteer, (event, volunteer) → application |
+| `temp` | OTP codes and rate-limit counters, each with an expiry time |
+
+To start from scratch, stop the server and delete the `data/` folder.
 
 ## Volunteer portal
 
-At `/volunteer`, a volunteer can:
+New volunteers start at `/volunteer`. Registered volunteers sign in at `/volunteer/login`, which also has the demo account. Both are the same page, `site/volunteer/index.html`. A volunteer can:
 
 1. **Verify their phone.** They enter their mobile number and type in the 6-digit OTP. A returning volunteer goes straight to their dashboard.
 2. **Register** (new volunteers):
@@ -82,24 +112,23 @@ To make the prototype work without any Vercel setup, these are hardcoded in `PRO
 | `APP_SECRET` | A fixed random secret |
 | `ADMIN_API_KEY` | `newbi-admin-2026`. Sign in with `POST /api/v1/admin/login` `{ "apiKey": "newbi-admin-2026", "name": "Your name" }`. |
 | OTP | Shown on screen instead of sent by SMS |
-| Demo events | Two each in Delhi, Mumbai and Bengaluru, and one each in Hyderabad, Pune, Kolkata and Chennai |
+| Demo mode | Demo events (two each in Delhi, Mumbai and Bengaluru, one each in Hyderabad, Pune, Kolkata and Chennai), demo volunteers for the Delhi leaderboard, and the [demo account](#demo-account) |
 
-The prototype has three limits:
+The prototype has two limits:
 
 - **It isn't secure.** This repo is public, so anyone can read the admin key and token secret. With on-screen OTPs, anyone can sign in as any number. **Don't collect real volunteers' details yet.**
-- **Data doesn't last on Vercel.** Without a database, accounts and applications are wiped whenever the server restarts: after a quiet period, and on every deploy. The demo events come back with fresh dates.
-- **Redis can't be hardcoded.** Lasting storage needs an actual database, and creating one needs your Vercel login.
+- **The hosted link needs a shared database.** Vercel runs several copies of the API at once, each with its own temporary disk. A file database can't be shared between them, and that includes SQLite. So right after signing up, some requests land on a copy that has never seen the account, and the portal drops back to step 1. Local runs (`npm start`) use SQLite and don't have this problem. On Vercel, add **Upstash for Redis** (step 1 below), which all copies share. It can't be hardcoded, because the database has to be created with your Vercel login first.
 
 ### Moving off the prototype
 
 Set these in Vercel → this project, then **redeploy**. They override the hardcoded values, so no code change is needed:
 
-1. **Storage** → add **Upstash for Redis** and connect it. This sets `KV_REST_API_URL` and `KV_REST_API_TOKEN`, and data stops disappearing.
+1. **Storage** → add **Upstash for Redis** and connect it. This sets `KV_REST_API_URL` and `KV_REST_API_TOKEN`. All copies of the API then share one database, so sign-ups stick and the step-1 bounce stops.
 2. **Settings → Environment Variables:**
    - `APP_SECRET`: your own 32+ random characters. Generate one with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
    - `ADMIN_API_KEY`: your own admin password.
    - `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`: real SMS. This also turns on-screen OTPs off. Indian SMS needs a DLT-registered sender.
-   - `SEED_DEMO_EVENTS=false`: stops adding demo events.
+   - `DEMO_MODE=false`: removes the demo account and stops adding demo data.
 3. Open https://newbi-clone.vercel.app/api/v1/health. `prototype` becomes `false`, and `warnings` lists anything still missing.
 
 All variables are listed in [`.env.example`](.env.example).

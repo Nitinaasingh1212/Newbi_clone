@@ -1,0 +1,186 @@
+// Demo data for the prototype:
+// - demo events in major cities (upcoming), plus three past events in Delhi;
+// - a demo volunteer you can sign in as (DEMO_LOGIN), with rated past events, one approved
+//   upcoming event and a Silver tier;
+// - four more Delhi volunteers, so the leaderboard has people on it.
+//
+// Every document has a fixed id and dates relative to today. The whole set is rewritten
+// once per server instance per day, before that instance's first request. Copies of the
+// function on Vercel don't share storage, but each writes the same documents, so the demo
+// looks identical whichever copy answers. Turn it all off with DEMO_MODE=false (or
+// PROTOTYPE.demoMode in config.js).
+import { keyedHash } from './tokens.js';
+import { cityField, verhoeffValid } from './validate.js';
+
+export const DEMO_LOGIN = { phone: '+919999999999', otp: '123456' };
+
+const VERSION = 'v2'; // bump when the demo data changes, to rewrite it today
+const BY = 'Demo data';
+const NOTE = 'Demo event for the volunteer prototype.';
+
+// inDays: days after today (India time). Past events are already completed.
+const EVENTS = [
+  { key: 'diwali', city: 'Delhi', inDays: 3, title: 'Diwali Night Market', venue: 'Jawaharlal Nehru Stadium', address: 'Gate 14, Lodhi Road', startTime: '16:00', endTime: '23:00', volunteersNeeded: 20, roles: ['Entry gate', 'Ticketing', 'Stall support'], description: 'An evening fair with 40 food and craft stalls and a live stage. Shift includes dinner and a crew tee.' },
+  { key: 'campus', city: 'Delhi', inDays: 10, title: 'Campus Fest Pro Night', venue: 'Thyagaraj Stadium', address: 'INA', startTime: '17:00', endTime: '22:30', volunteersNeeded: 30, roles: ['Crowd management', 'Backstage', 'Registration desk'], description: 'Headline night of a college fest: 4,000 students, two opening acts and a headliner.' },
+  { key: 'indie', city: 'Mumbai', inDays: 5, title: 'Indie Live: Sunset Sessions', venue: 'NSCI Dome', address: 'Worli', startTime: '17:30', endTime: '23:00', volunteersNeeded: 25, roles: ['Entry gate', 'Hospitality', 'Merch desk'], description: 'Three indie bands, one stage. Help run entry, the merch desk and the artist green room.' },
+  { key: 'popup', city: 'Mumbai', inDays: 12, title: 'Sneaker Brand Pop-up', venue: 'Phoenix Palladium', address: 'Lower Parel', startTime: '11:00', endTime: '21:00', volunteersNeeded: 10, roles: ['Queue management', 'Product demo'], description: 'Weekend launch pop-up with a raffle queue and live customisation.' },
+  { key: 'techfest', city: 'Bengaluru', inDays: 4, title: 'Tech Fest Expo Day', venue: 'Bangalore International Exhibition Centre', address: 'Tumkur Road', startTime: '09:30', endTime: '18:00', volunteersNeeded: 40, roles: ['Registration desk', 'Hall guide', 'Speaker support'], description: 'Student tech expo with 120 stalls and a speaker stage.' },
+  { key: 'comedy', city: 'Bengaluru', inDays: 9, title: 'Comedy Night Live', venue: 'Chowdiah Memorial Hall', address: 'Malleshwaram', startTime: '19:00', endTime: '22:00', volunteersNeeded: 8, roles: ['Ticketing', 'Ushering'], description: 'Sold-out stand-up show. Help with ticket checks and seating.' },
+  { key: 'edm', city: 'Hyderabad', inDays: 6, title: 'EDM Night', venue: 'Gachibowli Stadium', address: 'Gachibowli', startTime: '18:00', endTime: '23:30', volunteersNeeded: 35, roles: ['Crowd management', 'Wristbands', 'First aid support'], description: 'Large-format EDM night. Crowd and wristband teams needed.' },
+  { key: 'cultural', city: 'Pune', inDays: 7, title: 'College Cultural Fest', venue: 'COEP Ground', address: 'Shivajinagar', startTime: '10:00', endTime: '21:00', volunteersNeeded: 30, roles: ['Registration desk', 'Event coordination', 'Backstage'], description: 'Day-long cultural fest with dance, music and fashion competitions.' },
+  { key: 'carnival', city: 'Kolkata', inDays: 8, title: 'Food & Music Carnival', venue: 'Eco Park', address: 'New Town', startTime: '14:00', endTime: '22:00', volunteersNeeded: 18, roles: ['Stall support', 'Entry gate'], description: 'Weekend carnival with food stalls and live bands.' },
+  { key: 'beachrun', city: 'Chennai', inDays: 11, title: 'Brand Activation: Beach Run', venue: 'Besant Nagar Beach', address: 'Elliot’s Beach', startTime: '05:30', endTime: '10:00', volunteersNeeded: 15, roles: ['Route marshal', 'Hydration station', 'Registration desk'], description: '5K sunrise run with a sponsor activation zone at the finish.' },
+  { key: 'holi', city: 'Delhi', inDays: -40, title: 'Holi Colour Fest', venue: 'Jawaharlal Nehru Stadium', address: 'Lodhi Road', startTime: '10:00', endTime: '18:00', volunteersNeeded: 25, roles: ['Entry gate', 'Colour station', 'Crowd management'], description: 'Daytime colour festival with DJs and food stalls.' },
+  { key: 'spring', city: 'Delhi', inDays: -24, title: 'College Fest: Spring Edition', venue: 'Thyagaraj Stadium', address: 'INA', startTime: '12:00', endTime: '22:00', volunteersNeeded: 30, roles: ['Backstage', 'Registration desk'], description: 'Two-day college fest with competitions and a pro night.' },
+  { key: 'drop', city: 'Delhi', inDays: -9, title: 'Sneaker Drop Pop-up', venue: 'Select Citywalk', address: 'Saket', startTime: '11:00', endTime: '20:00', volunteersNeeded: 10, roles: ['Queue management', 'Raffle desk'], description: 'Limited sneaker drop with a raffle queue.' },
+];
+
+// history: [eventKey, stars or 'no_show', coordinator comment]. upcoming: [eventKey, status, note].
+const PEOPLE = [
+  {
+    key: 'riya', name: 'Riya Kapoor', phone: DEMO_LOGIN.phone, dateOfBirth: '2001-03-14', gender: 'female', area: 'Saket',
+    aadhaar: '212121212120', skills: ['Crowd management', 'Hospitality', 'Entry & ticketing'], languages: ['Hindi', 'English'],
+    emergencyContact: { name: 'Neha Kapoor', phone: '+919811100000', relation: 'Sister' },
+    history: [
+      ['holi', 5, 'Kept the entry queue moving all day.'],
+      ['spring', 4, 'Reliable backstage runner.'],
+      ['drop', 5, 'Calm and friendly with a huge raffle crowd.'],
+    ],
+    upcoming: [['diwali', 'approved', 'Report at Gate 14 by 3:30 pm. Crew tee at the volunteer desk.']],
+  },
+  {
+    key: 'arjun', name: 'Arjun Mehta', phone: '+919999900001', dateOfBirth: '1999-07-02', gender: 'male', area: 'Lajpat Nagar',
+    aadhaar: '313131313135', skills: ['Backstage & artist care', 'Logistics'], languages: ['Hindi', 'English', 'Punjabi'],
+    history: [['holi', 5, 'Ran the colour station single-handed.'], ['spring', 5, null], ['drop', 5, null]],
+    upcoming: [['diwali', 'approved', null]],
+  },
+  {
+    key: 'sana', name: 'Sana Khan', phone: '+919999900002', dateOfBirth: '2002-11-20', gender: 'female', area: 'Dwarka',
+    aadhaar: '414141414145', skills: ['Registration desk', 'Social media & content'], languages: ['Hindi', 'English', 'Urdu'],
+    history: [['holi', 4, null], ['drop', 5, 'Great at the raffle desk.']],
+    upcoming: [['campus', 'applied', null]],
+  },
+  {
+    key: 'kabir', name: 'Kabir Singh', phone: '+919999900003', dateOfBirth: '2000-01-09', gender: 'male', area: 'Rohini',
+    aadhaar: '515151515151', skills: ['Crowd management', 'Production & setup'], languages: ['Hindi'],
+    history: [['holi', 3, null], ['spring', 4, null], ['drop', 3, 'Arrived late, but solid once there.']],
+  },
+  {
+    key: 'meera', name: 'Meera Iyer', phone: '+919999900004', dateOfBirth: '2003-05-30', gender: 'female', area: 'Vasant Kunj',
+    aadhaar: '616161616166', skills: ['First aid', 'Hospitality'], languages: ['English', 'Tamil', 'Hindi'],
+    history: [['spring', 5, null], ['drop', 'no_show', 'Did not turn up or call.']],
+  },
+];
+
+function addDays(isoDate, days) {
+  const [y, m, d] = isoDate.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+// An instant on an India date, as an ISO timestamp.
+const at = (date, time = '12:00') => new Date(`${date}T${time}:00+05:30`).toISOString();
+
+export function isDemoVolunteerId(id) {
+  return typeof id === 'string' && id.startsWith('vol_demo_');
+}
+
+export async function seedDemoData(svc) {
+  const { db, store, config } = svc;
+  const today = svc.today();
+  const stamp = `${VERSION}:${today}`;
+  if ((await store.hget('meta', 'demoData')) === stamp) return false;
+
+  const events = new Map();
+  for (const { key, inDays, city, description, ...rest } of EVENTS) {
+    const date = addDays(today, inDays);
+    const event = {
+      id: `evt_demo_${key}`,
+      ...rest,
+      ...cityField(city, { required: true }),
+      description: `${description} ${NOTE}`,
+      date,
+      status: inDays < 0 ? 'completed' : 'open',
+      createdBy: BY,
+      createdAt: at(addDays(date, -21)),
+      updatedAt: at(addDays(date, -21)),
+    };
+    events.set(key, event);
+    await db.put('events', event);
+  }
+
+  for (const person of PEOPLE) {
+    const id = `vol_demo_${person.key}`;
+    if (!verhoeffValid(person.aadhaar)) throw new Error(`Demo Aadhaar for ${person.name} is invalid`);
+    const joined = at(addDays(today, -60));
+    await db.put('volunteers', {
+      id,
+      demo: true,
+      phone: person.phone,
+      name: person.name,
+      email: null,
+      dateOfBirth: person.dateOfBirth,
+      gender: person.gender,
+      ...cityField('Delhi', { required: true }),
+      area: person.area,
+      skills: person.skills,
+      languages: person.languages,
+      emergencyContact: person.emergencyContact ?? null,
+      aadhaar: { last4: person.aadhaar.slice(-4), hash: keyedHash(config.appSecret, 'aadhaar', person.aadhaar) },
+      kyc: { status: 'verified', note: 'Card checked at the volunteer desk.', reviewedAt: joined, reviewedBy: BY },
+      status: 'active',
+      createdAt: joined,
+      updatedAt: joined,
+    });
+    await store.hset('idx:phone', person.phone, id);
+
+    const apply = async (eventKey, fields) => {
+      const event = events.get(eventKey);
+      const app = {
+        id: `app_demo_${person.key}_${eventKey}`,
+        eventId: event.id,
+        volunteerId: id,
+        preferredRole: event.roles[0] ?? null,
+        note: null,
+        appliedAt: at(addDays(event.date, -6)),
+        decidedAt: null,
+        decidedBy: null,
+        decisionNote: null,
+        withdrawnAt: null,
+        review: null,
+        updatedAt: at(addDays(event.date, -3)),
+        ...fields,
+      };
+      await db.put('applications', app);
+      await store.hset('idx:application', `${event.id}:${id}`, app.id);
+    };
+    for (const [eventKey, stars, comment] of person.history) {
+      const date = events.get(eventKey).date;
+      const outcome = stars === 'no_show' ? 'no_show' : 'completed';
+      await apply(eventKey, {
+        status: outcome,
+        decidedAt: at(addDays(date, -3)),
+        decidedBy: BY,
+        review: { outcome, rating: outcome === 'completed' ? stars : null, comment, reviewedBy: BY, reviewedAt: at(date, '23:30') },
+      });
+    }
+    for (const [eventKey, status, note] of person.upcoming ?? []) {
+      const decided = status === 'approved';
+      await apply(eventKey, {
+        status,
+        decidedAt: decided ? at(addDays(today, -1)) : null,
+        decidedBy: decided ? BY : null,
+        decisionNote: note,
+      });
+    }
+  }
+
+  // Older versions of the prototype added demo events with random ids; drop the unused ones.
+  const applications = await db.all('applications');
+  for (const event of await db.all('events')) {
+    if (event.createdBy === BY && !event.id.startsWith('evt_demo_') && !applications.some((a) => a.eventId === event.id)) {
+      await store.hdel('events', event.id);
+    }
+  }
+
+  await store.hset('meta', 'demoData', stamp);
+  return true;
+}

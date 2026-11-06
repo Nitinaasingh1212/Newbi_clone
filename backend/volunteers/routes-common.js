@@ -2,6 +2,7 @@
 import { configProblem } from './config.js';
 import { rankVolunteers, rankingRules } from './ranking.js';
 import { cityField, integer } from './validate.js';
+import { DEMO_LOGIN } from './demo-data.js';
 
 // "Rahul Kumar Sharma" -> "Rahul S." so volunteers don't see each other's full names.
 const shortName = (name) => {
@@ -18,6 +19,9 @@ export function commonRoutes(define, svc) {
     const warnings = [];
     if (problem) warnings.push(problem);
     if (!config.adminApiKey) warnings.push('ADMIN_API_KEY is not set, so admin sign-in is disabled.');
+    if (storage.kind === 'file' && config.sqliteFile) {
+      warnings.push('SQLite is not available (better-sqlite3 is not installed), so data is in a JSON file. Run npm install.');
+    }
     if (!storage.persistent) {
       warnings.push('No Redis configured: accounts and events reset whenever the server restarts. Set KV_REST_API_URL and KV_REST_API_TOKEN (Upstash Redis) to keep them.');
     }
@@ -33,6 +37,9 @@ export function commonRoutes(define, svc) {
       prototype: config.usingPrototypeSecrets,
       storage: { kind: storage.kind, persistent: storage.persistent },
       otpDelivery: config.otpDevMode ? 'dev-mode' : svc.sendSms ? 'sms' : 'unavailable',
+      ...(config.demoMode && {
+        demoLogin: { phone: `${DEMO_LOGIN.phone.slice(3, 8)} ${DEMO_LOGIN.phone.slice(8)}`, otp: DEMO_LOGIN.otp },
+      }),
       today: svc.today(),
       warnings,
     };

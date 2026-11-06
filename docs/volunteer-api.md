@@ -468,13 +468,26 @@ The API runs with no configuration, locally and on Vercel. These prototype value
 | `APP_SECRET` | A fixed random 64-character secret |
 | `ADMIN_API_KEY` | `newbi-admin-2026` |
 | OTP delivery | Dev mode: the OTP is returned in the API response and shown on the portal, until Twilio is configured |
-| Demo events | Two events each in Delhi, Mumbai and Bengaluru, and one each in Hyderabad, Pune, Kolkata and Chennai. They are added when there are no events at all, with dates a few days ahead. |
+| Demo mode | Demo events in seven cities, five demo volunteers in Delhi with rated history, and a demo account (see below). It is defined in `backend/volunteers/demo-data.js`. |
+
+**Demo account:** phone `99999 99999`, OTP `123456`. The code is fixed, no SMS is sent, and nothing is stored to check it, so it signs in on any server copy. It signs in as Riya Kapoor (`vol_demo_riya`), Delhi, KYC verified, 55 points, Silver, #2 of 5 in Delhi. `GET /health` returns these details as `demoLogin`.
+
+All demo documents have fixed ids (`evt_demo_*`, `vol_demo_*`, `app_demo_*`) and dates relative to today. Each server instance rewrites them once a day, before its first request. Copies of the function that don't share storage therefore all hold the same demo data.
+
+On storage that isn't kept (Vercel without Redis), demo volunteers are **view-only**. `PATCH /volunteer/me`, `apply` and `withdraw` return `403 demo_read_only`, and `GET /volunteer/me` includes `"demoReadOnly": true`. On SQLite or Redis the demo account works fully.
 
 The prototype has three limits:
 
 - **No real security.** The repository is public, so anyone can read the admin key and the token secret. With the dev OTP, anyone can also sign in as any phone number. Don't collect real volunteers' details in this mode.
-- **No lasting storage.** Without Redis, Vercel keeps data in `/tmp`, which is wiped when the server instance restarts. That happens after a period without traffic, or on each deploy. Accounts and applications disappear, and the demo events come back with fresh dates. A volunteer whose account was wiped sees "Please sign in again" and has to register again.
-- **Possible OTP mismatches.** If Vercel ever runs two instances at once, they don't share data, so a code sent by one may be "expired" on the other.
+- **No shared storage on Vercel.** Vercel runs several copies of the function at once, and without Redis each keeps its own data in its own `/tmp`. Measured on the live site: right after registering, about 1 in 3 dashboard requests reached a copy that had never seen the account and got `401 account_not_found`. A code sent by one copy can also be "expired" on another. `/tmp` is wiped on restarts and deploys as well. A file database can't fix this, SQLite included; only a shared store such as Redis can.
+
+### Storage
+
+| Where | Store |
+|---|---|
+| `KV_REST_API_URL`/`KV_REST_API_TOKEN` set | Upstash Redis, shared by every copy. Use this for the hosted site. |
+| Local runs (`npm start`) | **SQLite** at `data/newbi.sqlite`, via `better-sqlite3` (installed by `npm install`). It has `volunteers`, `events` and `applications` tables, with readable generated columns (`name`, `city`, `status`, …) and the full record in `doc`, plus `kv` (lookups) and `temp` (OTPs, rate limits). |
+| Vercel without Redis, or SQLite not installed | A JSON file (`/tmp/volunteer-db.json` on Vercel, `data/volunteer-db.json` locally) |
 
 ### Moving off the prototype
 
@@ -487,9 +500,10 @@ Environment variables override the hardcoded values, so no code change is needed
 | `ADMIN_API_KEY` | Your own admin password for `/admin/login`. |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` | Real OTP texts. Setting these turns dev mode off. Indian SMS needs a DLT-registered sender and template. |
 | `OTP_DEV_MODE` | `true` or `false` forces dev mode on or off regardless of Twilio. |
-| `SEED_DEMO_EVENTS` | `false` stops adding demo events. |
+| `DEMO_MODE` | `false` removes the demo account and stops writing demo data. |
 | `CORS_ORIGIN` | Allowed browser origin. The default is `*`. |
-| `VOLUNTEER_DB_FILE` | File used when Redis isn't configured. The default is `data/volunteer-db.json` locally and `/tmp/volunteer-db.json` on Vercel. |
+| `SQLITE_FILE` | SQLite database file. The default is `data/newbi.sqlite` locally; it is off on Vercel unless set. |
+| `VOLUNTEER_DB_FILE` | JSON fallback file. The default is `data/volunteer-db.json` locally and `/tmp/volunteer-db.json` on Vercel. |
 
 After changing variables in Vercel, redeploy. Then open `https://newbi-clone.vercel.app/api/v1/health`. `prototype` turns `false` once your own secrets are set, and `warnings` lists anything still missing.
 

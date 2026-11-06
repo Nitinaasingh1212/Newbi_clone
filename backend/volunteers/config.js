@@ -14,8 +14,9 @@ const PROJECT_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 export const PROTOTYPE = {
   appSecret: 'dbba0e17c020bb360b32e2bfb2dac8470a63a32b269ee4ade43653fba8d55ec8',
   adminApiKey: 'newbi-admin-2026',
-  // Adds demo events in major cities whenever there are no events at all (see demo-events.js).
-  seedDemoEvents: true,
+  // Demo events, demo volunteers for the leaderboard, and a demo account anyone can sign in
+  // as: phone 99999 99999, OTP 123456 (see demo-data.js).
+  demoMode: true,
 };
 
 export const LIMITS = {
@@ -52,9 +53,13 @@ export function loadConfig(env = process.env) {
     // Dev mode returns the OTP in the API response instead of sending an SMS. It stays on
     // until Twilio is configured, unless OTP_DEV_MODE says otherwise.
     otpDevMode: env.OTP_DEV_MODE ? env.OTP_DEV_MODE === 'true' : !twilio,
-    seedDemoEvents: env.SEED_DEMO_EVENTS ? env.SEED_DEMO_EVENTS === 'true' : PROTOTYPE.seedDemoEvents,
+    demoMode: env.DEMO_MODE ? env.DEMO_MODE === 'true' : PROTOTYPE.demoMode,
     twilio,
     redis: redisUrl && redisToken ? { url: redisUrl.replace(/\/+$/, ''), token: redisToken } : null,
+    // Local runs keep data in SQLite. Not on Vercel: each copy of the function there has
+    // its own disk, so a file database can't be shared between them (use Redis instead).
+    sqliteFile: env.SQLITE_FILE || (onVercel ? null : join(PROJECT_ROOT, 'data', 'newbi.sqlite')),
+    // Fallback when neither Redis nor SQLite is available.
     dbFile:
       env.VOLUNTEER_DB_FILE ||
       (onVercel ? '/tmp/volunteer-db.json' : join(PROJECT_ROOT, 'data', 'volunteer-db.json')),

@@ -86,6 +86,7 @@ export const byEventDate = (a, b) =>
 export function volunteerView(v, { stats, standing, admin = false } = {}) {
   return {
     id: v.id,
+    ...(v.demo && { demo: true }),
     name: v.name,
     phone: v.phone,
     email: v.email,

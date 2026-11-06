@@ -39,6 +39,14 @@ export function volunteerRoutes(define, svc) {
     if (name.length < 2) throw badRequest('invalid_field', 'name is too short.', { field: 'name' });
     return name;
   };
+  // Where storage isn't shared or kept (Vercel without Redis), a change to the demo account
+  // would reach only one copy of the function, so the demo is view-only there.
+  const demoReadOnly = (volunteer) => Boolean(volunteer.demo) && !store.describe().persistent;
+  const assertWritable = (volunteer) => {
+    if (demoReadOnly(volunteer)) {
+      throw new HttpError(403, 'demo_read_only', 'The demo account is view-only here. Sign up with your own number to apply to events.');
+    }
+  };
   const cityMismatch = (event, volunteer) =>
     new HttpError(
       403,
@@ -58,7 +66,9 @@ export function volunteerRoutes(define, svc) {
       resendAfterSeconds: LIMITS.otpResendSeconds,
       ...(result.devOtp && {
         devOtp: result.devOtp,
-        devNote: 'OTP dev mode is on, so the code is returned here instead of being sent by SMS.',
+        devNote: result.demo
+          ? 'This is the demo account; its code is always the same.'
+          : 'OTP dev mode is on, so the code is returned here instead of being sent by SMS.',
       }),
     };
   });
@@ -132,10 +142,14 @@ export function volunteerRoutes(define, svc) {
   define('GET', '/volunteer/me', { auth: 'volunteer', summary: 'Your profile, stats, tier and rank' }, async ({ auth }) => {
     const snapshot = await svc.rankingSnapshot();
     const v = auth.volunteer;
-    return { volunteer: volunteerView(v, { stats: snapshot.statsOf(v.id), standing: svc.standing(v, snapshot) }) };
+    return {
+      volunteer: volunteerView(v, { stats: snapshot.statsOf(v.id), standing: svc.standing(v, snapshot) }),
+      ...(v.demo && { demoReadOnly: demoReadOnly(v) }),
+    };
   });
 
   define('PATCH', '/volunteer/me', { auth: 'volunteer', summary: 'Update your profile, including your city' }, async ({ body, auth }) => {
+    assertWritable(auth.volunteer);
     onlyFields(body, PROFILE_FIELDS);
     const v = structuredClone(auth.volunteer);
     const kycTouched = KYC_FIELDS.filter((f) => f in body);
@@ -211,6 +225,7 @@ export function volunteerRoutes(define, svc) {
     { auth: 'volunteer', status: 201, summary: 'Apply to work an event in your city' },
     async ({ auth, params, body }) => {
       const v = auth.volunteer;
+      assertWritable(v);
       const event = await svc.requireDoc('events', params.eventId, 'Event');
       if (event.cityKey !== v.cityKey) throw cityMismatch(event, v);
       if (event.status !== 'open') {
@@ -258,6 +273,7 @@ export function volunteerRoutes(define, svc) {
     { auth: 'volunteer', summary: 'Withdraw your application before the event' },
     async ({ auth, params }) => {
       const v = auth.volunteer;
+      assertWritable(v);
       const event = await svc.requireDoc('events', params.eventId, 'Event');
       const appId = await store.hget('idx:application', `${event.id}:${v.id}`);
       const app = appId && (await db.get('applications', appId));

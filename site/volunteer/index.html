@@ -75,6 +75,8 @@
       .intro { position: sticky; top: 112px; }
     }
     .layout.is-dashboard { grid-template-columns: minmax(0, 1fr); padding-top: 40px; }
+    /* On narrow screens the sign-in page shows its card before the intro. */
+    @media (max-width: 959px) { .layout.is-login .intro { order: 2; } .layout.is-login { padding-top: 24px; } }
     .layout.is-dashboard .intro { display: none; }
     .intro h1 { margin-top: 16px; font-weight: 800; font-size: clamp(2.6rem, 7vw, 4.6rem); line-height: .95; letter-spacing: -.045em; }
     .intro .lead { margin-top: 20px; font-size: 18px; max-width: 34rem; color: var(--muted); }
@@ -120,13 +122,21 @@
     .chip input:focus-visible + span { outline: 2px solid var(--focus); outline-offset: 2px; }
     .check { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 10px; align-items: start; margin-top: 24px; font-size: 14px; }
     .check input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--btn); }
+    .demo-box { margin-top: 28px; padding: 18px; border: 1px dashed var(--line-strong); border-radius: 18px; background: var(--surface-2); }
+    .demo-box p { margin-top: 8px; font-size: 14px; color: var(--muted); }
+    .demo-box .btn.block { margin-top: 14px; background: var(--surface); }
+    .creds { display: flex; flex-wrap: wrap; gap: 8px 28px; margin: 12px 0 0; }
+    .creds dt { font-size: 12px; color: var(--muted); }
+    .creds dd { margin: 2px 0 0; font: 700 17px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .04em; }
+    .switch { margin-top: 20px; text-align: center; font-size: 14px; color: var(--muted); }
+    .switch a { color: var(--text); font-weight: 600; text-underline-offset: 3px; }
 
     /* Buttons */
     .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 52px; padding: 0 28px; border: 0; border-radius: 999px; background: var(--btn); color: var(--btn-text); font: 700 16px/1 Manrope, Inter, sans-serif; text-decoration: none; cursor: pointer; transition: transform .15s ease, opacity .15s; }
     .btn:hover { transform: scale(1.02); }
     .btn:active { transform: scale(.98); }
     .btn[disabled] { opacity: .5; cursor: progress; transform: none; }
-    .btn.block { width: 100%; margin-top: 24px; }
+    .btn.block { width: 100%; margin-top: 24px; height: auto; min-height: 52px; padding-top: 12px; padding-bottom: 12px; line-height: 1.25; text-align: center; }
     .btn.sm { height: 40px; padding: 0 18px; font-size: 14px; }
     .btn.ghost { background: transparent; color: var(--text); box-shadow: inset 0 0 0 1px var(--line-strong); }
     .linkbtn { background: none; border: 0; padding: 0; color: inherit; font: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
@@ -332,6 +342,7 @@
         timers = [];
         app.innerHTML = html;
         layout.classList.toggle('is-dashboard', mode === 'dashboard');
+        layout.classList.toggle('is-login', mode !== 'dashboard' && onLoginPage());
         signOutBtn.hidden = mode !== 'dashboard';
       }
 
@@ -434,23 +445,69 @@
         );
       }
 
+      // /volunteer/login is the sign-in page (with the demo account); /volunteer is sign-up.
+      // Both are this one page; the path only changes the wording and the links.
+      function onLoginPage() { return /^\/volunteer\/login\/?$/.test(location.pathname); }
+      function setPath(path) {
+        if (location.pathname !== path) { try { history.replaceState(null, '', path); } catch (e) {} }
+        document.title = path === '/volunteer/login' ? 'Sign in — Newbi volunteers' : 'Volunteer with Newbi — newbi.live';
+      }
+
+      function demoBox() {
+        var demo = state.demoLogin;
+        if (!demo) return '';
+        return '<div class="demo-box" id="demo">' +
+          '<span class="label">Demo account</span>' +
+          '<p>See a volunteer dashboard filled with sample events, ratings and a leaderboard.</p>' +
+          '<dl class="creds"><div><dt>Phone</dt><dd>+91 ' + esc(demo.phone) + '</dd></div><div><dt>OTP</dt><dd>' + esc(demo.otp) + '</dd></div></dl>' +
+          '<button class="btn ghost block" type="button" id="demo-login">Sign in as the demo volunteer</button>' +
+          '<p class="err" id="demo-err"></p></div>';
+      }
+
+      function signInAsDemo(button) {
+        var demo = state.demoLogin;
+        var done = busy(button, 'Signing in…');
+        api('/auth/send-otp', { method: 'POST', body: { phone: demo.phone } })
+          .then(function (sent) { return api('/auth/verify-otp', { method: 'POST', body: { phone: sent.phone, otp: demo.otp } }); })
+          .then(function (res) {
+            write(localStorage, TOKEN_KEY, res.token);
+            setPath('/volunteer');
+            loadDashboard();
+          })
+          .catch(function (err) {
+            done();
+            document.getElementById('demo-err').textContent = err.message;
+          });
+      }
+
       function viewPhone() {
         var flash = state.flash;
         state.flash = null;
+        var login = onLoginPage();
+        setPath(login ? '/volunteer/login' : '/volunteer');
         render(
           '<div class="card"><form id="f-phone" novalidate>' +
-          '<span class="label">Step 1 of 3</span>' +
-          '<h2>Sign up or sign in</h2>' +
-          '<p class="muted">New here? You\'ll set up your volunteer profile next. Already registered? You\'ll go straight to your events.</p>' +
+          (login
+            ? '<span class="label">Volunteer sign in</span><h2>Welcome back</h2>' +
+              '<p class="muted">Sign in with the mobile number you registered with. We\'ll send you a 6-digit code.</p>'
+            : '<span class="label">Step 1 of 3</span><h2>Sign up or sign in</h2>' +
+              '<p class="muted">New here? You\'ll set up your volunteer profile next. Already registered? You\'ll go straight to your events.</p>') +
           (flash ? '<p class="notice warn">' + esc(flash) + '</p>' : '') +
           '<div class="field"><label for="phone">Mobile number</label>' +
           '<div class="phone-row"><span class="prefix">+91</span>' +
           '<input class="input" id="phone" name="phone" type="tel" inputmode="numeric" autocomplete="tel-national" placeholder="98765 43210" maxlength="14" value="' + esc(state.phoneInput || '') + '" required></div>' +
           '<p class="err" data-err="phone"></p></div>' +
           '<p class="err form-error" role="alert"></p>' +
-          '<button class="btn block" type="submit">Send OTP</button>' +
-          '</form></div>'
+          '<button class="btn block" type="submit">' + (login ? 'Send code' : 'Send OTP') + '</button>' +
+          '</form>' +
+          (login
+            ? demoBox() + '<p class="switch">New volunteer? <a href="/volunteer">Create your profile</a></p>'
+            : '<p class="switch">Already registered? <a href="/volunteer/login">Sign in</a>' +
+              (state.demoLogin ? ' · Just looking? <a href="/volunteer/login#demo">Try the demo account</a>' : '') + '</p>') +
+          '</div>'
         );
+        var demoButton = document.getElementById('demo-login');
+        if (demoButton) demoButton.addEventListener('click', function () { signInAsDemo(demoButton); });
         var form = document.getElementById('f-phone');
         form.addEventListener('submit', function (ev) {
           ev.preventDefault();
@@ -476,14 +533,23 @@
         form.phone.focus();
       }
 
+      function isDemoPhone(phone) {
+        return Boolean(state.demoLogin) && phone === '+91' + state.demoLogin.phone.replace(/\D/g, '');
+      }
+
       function viewOtp() {
+        var demo = isDemoPhone(state.phone);
         render(
           '<div class="card"><form id="f-otp" novalidate>' +
-          '<span class="label">Step 2 of 3</span>' +
+          '<span class="label">' + (onLoginPage() ? 'Volunteer sign in' : 'Step 2 of 3') + '</span>' +
           '<h2>Enter the code</h2>' +
           '<p class="muted">We sent a 6-digit code to <b>' + esc(prettyPhone(state.phone)) + '</b>. ' +
           '<button type="button" class="linkbtn" id="change-phone">Change number</button></p>' +
-          (state.devOtp ? '<p class="notice"><b>Test mode:</b> SMS isn\'t switched on yet, so here is your code: <b>' + esc(state.devOtp) + '</b></p>' : '') +
+          (state.devOtp
+            ? demo
+              ? '<p class="notice"><b>Demo account:</b> the code is always <b>' + esc(state.devOtp) + '</b>.</p>'
+              : '<p class="notice"><b>Test mode:</b> SMS isn\'t switched on yet, so here is your code: <b>' + esc(state.devOtp) + '</b></p>'
+            : '') +
           '<div class="field"><label for="otp">One-time code</label>' +
           '<input class="input otp-input" id="otp" name="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" value="' + esc(state.devOtp || '') + '" required>' +
           '<p class="err" data-err="otp"></p></div>' +
@@ -523,8 +589,11 @@
           var done = busy(form.querySelector('button[type=submit]'), 'Checking…');
           api('/auth/verify-otp', { method: 'POST', body: { phone: state.phone, otp: code } })
             .then(function (res) {
+              var cameFromLogin = onLoginPage();
+              setPath('/volunteer');
               if (res.isNewUser) {
                 write(session(), REG_KEY, JSON.stringify({ token: res.registrationToken, phone: state.phone, expires: Date.now() + res.expiresInSeconds * 1000 }));
+                if (cameFromLogin) state.flash = "This number isn't registered yet. Fill in your details to create your volunteer profile.";
                 viewRegister();
               } else {
                 write(localStorage, TOKEN_KEY, res.token);
@@ -533,6 +602,7 @@
             })
             .catch(function (err) {
               done();
+              if (err.code === 'wrong_otp' && isDemoPhone(state.phone)) return setFieldError(form, 'otp', err.message);
               if (err.code === 'wrong_otp') {
                 var left = err.details.attemptsLeft;
                 return setFieldError(form, 'otp', left ? 'That code is incorrect. ' + left + ' attempt' + (left === 1 ? '' : 's') + ' left.' : err.message);
@@ -556,6 +626,9 @@
           state.flash = 'Your verification expired. Verify your number again to continue.';
           return viewPhone();
         }
+        var flash = state.flash;
+        state.flash = null;
+        setPath('/volunteer');
         var maxDob = new Date();
         maxDob.setFullYear(maxDob.getFullYear() - 18);
         var skillChips = SKILLS.map(function (s) {
@@ -567,6 +640,7 @@
           '<span class="label">Step 3 of 3</span>' +
           '<h2>Your volunteer profile</h2>' +
           '<p class="muted">Signing up as <b>' + esc(prettyPhone(reg.phone)) + '</b>. Fields marked optional can be skipped.</p>' +
+          (flash ? '<p class="notice warn">' + esc(flash) + '</p>' : '') +
 
           '<fieldset><legend>About you</legend>' +
           '<div class="field"><label for="name">Full name <span class="optional">(as on your Aadhaar)</span></label>' +
@@ -709,6 +783,7 @@
           state.rules ? Promise.resolve({ rules: state.rules }) : api('/ranking/rules')
         ]).then(function (r) {
           state.me = r[0].volunteer;
+          state.demoReadOnly = Boolean(r[0].demoReadOnly);
           state.events = r[1].events;
           state.applications = r[2].applications;
           state.board = r[3];
@@ -717,7 +792,11 @@
         }).catch(function (err) {
           if (err.code === 'not_configured') return viewClosed();
           if (err.status === 401 || err.code === 'account_suspended') {
-            signOut(err.code === 'account_suspended' ? err.message : 'Please sign in again.');
+            signOut(
+              err.code === 'account_suspended' ? err.message
+                : err.code === 'account_not_found' ? "We couldn't find your volunteer account on the server. Verify your number again, and if you're asked for your details, fill them in once more."
+                : 'Your session has ended. Please sign in again.'
+            );
             return;
           }
           render('<div class="card"><h2>Something went wrong</h2><p class="muted" style="margin-top:10px">' + esc(err.message) + '</p><button class="btn block" type="button" id="retry">Try again</button></div>', 'dashboard');
@@ -727,9 +806,18 @@
 
       function signOut(message) {
         write(localStorage, TOKEN_KEY, null);
-        state = { flash: message || null, tab: state.tab };
+        state = { flash: message || null, tab: state.tab, demoLogin: state.demoLogin };
+        setPath('/volunteer/login');
         viewPhone();
         window.scrollTo(0, 0);
+      }
+
+      function demoNotice(me) {
+        if (!me.demo) return '';
+        return '<p class="notice"><b>Demo account.</b> Everything here is sample data, refreshed daily. ' +
+          (state.demoReadOnly
+            ? 'It\'s view-only on this server, so applying and changing city are switched off. <a href="/volunteer">Sign up with your own number</a> to try them.'
+            : 'Go ahead and apply to events; the demo resets each day.') + '</p>';
       }
 
       function kycNotice(me) {
@@ -770,12 +858,14 @@
           '<div class="dash">' +
           '<div class="dash-head"><span class="label">Volunteer dashboard</span>' +
           '<h1>Hi, ' + esc(me.name.split(' ')[0]) + '</h1>' +
-          '<p class="muted">Showing events in <b style="color:var(--text)">' + esc(me.city) + '</b> · <button class="linkbtn" type="button" id="change-city">Change city</button></p></div>' +
+          '<p class="muted">Showing events in <b style="color:var(--text)">' + esc(me.city) + '</b>' +
+          (state.demoReadOnly ? '' : ' · <button class="linkbtn" type="button" id="change-city">Change city</button>') + '</p></div>' +
           '<form class="inline-form" id="f-city" hidden novalidate><label class="field-label" for="new-city">Your city</label>' +
           '<div class="row"><input class="input" id="new-city" name="city" list="city-options" value="' + esc(me.city) + '" maxlength="60">' +
           '<button class="btn sm" type="submit">Save</button><button class="btn sm ghost" type="button" id="city-cancel">Cancel</button></div>' +
           '<p class="err form-error" role="alert"></p></form>' +
           (welcome ? '<p class="notice ok"><b>You\'re in!</b> Your volunteer profile is ready. Apply to any event below.</p>' : '') +
+          demoNotice(me) +
           kycNotice(me) +
           '<div class="stats">' +
           '<div class="stat"><b>' + s.points + '</b><span>Points</span></div>' +
@@ -806,7 +896,8 @@
         });
 
         var cityForm = document.getElementById('f-city');
-        document.getElementById('change-city').addEventListener('click', function () {
+        var changeCity = document.getElementById('change-city');
+        if (changeCity) changeCity.addEventListener('click', function () {
           cityForm.hidden = false;
           cityForm.city.focus();
           cityForm.city.select();
@@ -881,7 +972,9 @@
           var mine = e.myApplication;
           var action;
           if (!mine || mine.status === 'withdrawn') {
-            if (e.slotsLeft > 0) {
+            if (state.demoReadOnly) {
+              action = '<span class="badge">Applying is off in the view-only demo</span>';
+            } else if (e.slotsLeft > 0) {
               var roles = e.roles.length
                 ? '<select class="input sm" data-role-for="' + esc(e.id) + '" aria-label="Preferred role for ' + esc(e.title) + '"><option value="">Any role</option>' +
                   e.roles.map(function (r) { return '<option>' + esc(r) + '</option>'; }).join('') + '</select>'
@@ -893,7 +986,7 @@
           } else {
             var st = STATUS[mine.status] || { text: mine.status, tone: '' };
             action = '<span class="badge ' + st.tone + '">' + esc(st.text) + '</span>';
-            if (mine.status === 'applied' || mine.status === 'approved') {
+            if ((mine.status === 'applied' || mine.status === 'approved') && !state.demoReadOnly) {
               action += '<button class="linkbtn" type="button" data-withdraw="' + esc(e.id) + '">Withdraw</button>';
             }
           }
@@ -992,17 +1085,21 @@
       signOutBtn.addEventListener('click', function () { signOut(null); });
 
       loadCities();
+      // /health also says whether the demo account exists, and its sign-in details.
+      var health = api('/health').catch(function () { return null; }); // a real problem shows up in the form
       if (token()) {
+        if (onLoginPage()) setPath('/volunteer');
         loadDashboard();
+        health.then(function (h) { if (h) state.demoLogin = h.demoLogin || null; });
       } else {
-        api('/health')
-          .then(function (h) { return h.status === 'ok'; })
-          .catch(function () { return true; }) // let the form surface any real error
-          .then(function (open) {
-            if (!open) return viewClosed();
-            if (registration()) viewRegister();
-            else viewPhone();
-          });
+        health.then(function (h) {
+          if (h) state.demoLogin = h.demoLogin || null;
+          if (h && h.status !== 'ok') return viewClosed();
+          if (!onLoginPage() && registration()) viewRegister();
+          else viewPhone();
+          var demoBox = location.hash === '#demo' && document.getElementById('demo');
+          if (demoBox) demoBox.scrollIntoView({ block: 'center' });
+        });
       }
     })();
   </script>

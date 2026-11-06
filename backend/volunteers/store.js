@@ -2,18 +2,136 @@
 // OTP codes and rate-limit counters are short-lived keys with a TTL.
 //
 // - Upstash Redis over its REST API when KV_REST_API_URL/KV_REST_API_TOKEN (or the
-//   UPSTASH_REDIS_REST_* pair) are set. Use this on Vercel: it is the only option here that
-//   keeps data between function invocations.
-// - Otherwise a JSON file (data/volunteer-db.json locally). On Vercel that file sits in /tmp,
-//   which belongs to one function instance and is wiped on cold starts.
+//   UPSTASH_REDIS_REST_* pair) are set. Use this on Vercel: Vercel runs several copies of
+//   the function at once, and Redis is the only option here that they all share.
+// - Otherwise SQLite (data/newbi.sqlite) for local runs, through better-sqlite3.
+// - Otherwise a JSON file: on Vercel without Redis (/tmp, one per function copy, wiped on
+//   restart), or locally if better-sqlite3 isn't installed.
 // - createMemoryStore() keeps everything in memory, for tests.
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { dirname } from 'node:path';
+
+const require = createRequire(import.meta.url);
 
 export function createStore(config) {
   if (config.redis) return redisStore(config.redis);
+  if (config.sqliteFile) {
+    try {
+      return sqliteStore(config.sqliteFile);
+    } catch (err) {
+      if (err.code !== 'MODULE_NOT_FOUND' && !/better-sqlite3|bindings/i.test(err.message)) throw err;
+      console.warn(`[volunteer-api] SQLite unavailable (${err.message.split('\n')[0]}); using ${config.dbFile}. Run npm install to enable it.`);
+    }
+  }
   return fileStore(config.dbFile, { persistent: !config.onVercel });
+}
+
+// Each collection gets its own table. The document is stored whole in `doc`; the other
+// columns are generated from it so the data is readable in any SQLite browser.
+const SQLITE_TABLES = {
+  volunteers: { name: '$.name', phone: '$.phone', city: '$.city', kyc_status: '$.kyc.status', status: '$.status', created_at: '$.createdAt' },
+  events: { title: '$.title', city: '$.city', date: '$.date', status: '$.status', volunteers_needed: '$.volunteersNeeded', created_by: '$.createdBy' },
+  applications: { event_id: '$.eventId', volunteer_id: '$.volunteerId', status: '$.status', preferred_role: '$.preferredRole', rating: '$.review.rating', applied_at: '$.appliedAt' },
+};
+
+export function sqliteStore(file) {
+  const Database = require('better-sqlite3');
+  if (file !== ':memory:') mkdirSync(dirname(file), { recursive: true });
+  const db = new Database(file);
+  db.pragma('journal_mode = WAL');
+  db.pragma('busy_timeout = 5000');
+
+  for (const [table, columns] of Object.entries(SQLITE_TABLES)) {
+    const generated = Object.entries(columns)
+      .map(([column, path]) => `, ${column} GENERATED ALWAYS AS (json_extract(doc, '${path}')) VIRTUAL`)
+      .join('');
+    db.exec(`CREATE TABLE IF NOT EXISTS ${table} (id TEXT PRIMARY KEY, doc TEXT NOT NULL${generated})`);
+  }
+  // kv: lookup indexes (phone -> volunteer, Aadhaar hash -> volunteer, ...) and flags.
+  // temp: OTP codes and rate-limit counters, each with an expiry time in ms.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS kv (name TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (name, key));
+    CREATE TABLE IF NOT EXISTS temp (key TEXT PRIMARY KEY, value TEXT NOT NULL, expires_at INTEGER NOT NULL);
+  `);
+
+  const docs = Object.fromEntries(
+    Object.keys(SQLITE_TABLES).map((t) => [
+      t,
+      {
+        get: db.prepare(`SELECT doc AS value FROM ${t} WHERE id = ?`),
+        all: db.prepare(`SELECT id AS key, doc AS value FROM ${t}`),
+        put: db.prepare(`INSERT INTO ${t} (id, doc) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET doc = excluded.doc`),
+        putNew: db.prepare(`INSERT OR IGNORE INTO ${t} (id, doc) VALUES (?, ?)`),
+        del: db.prepare(`DELETE FROM ${t} WHERE id = ?`),
+      },
+    ]),
+  );
+  const kvGet = db.prepare('SELECT value FROM kv WHERE name = ? AND key = ?');
+  const kvAll = db.prepare('SELECT key, value FROM kv WHERE name = ?');
+  const kvPut = db.prepare('INSERT INTO kv (name, key, value) VALUES (?, ?, ?) ON CONFLICT(name, key) DO UPDATE SET value = excluded.value');
+  const kvPutNew = db.prepare('INSERT OR IGNORE INTO kv (name, key, value) VALUES (?, ?, ?)');
+  const kvDel = db.prepare('DELETE FROM kv WHERE name = ? AND key = ?');
+  // Hash names come from the code, never from requests; unknown ones go to the kv table.
+  const table = (hash) => (Object.hasOwn(docs, hash) ? docs[hash] : null);
+
+  const tempGet = db.prepare('SELECT value FROM temp WHERE key = ? AND expires_at > ?');
+  const tempSet = db.prepare('INSERT INTO temp (key, value, expires_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, expires_at = excluded.expires_at');
+  const tempDel = db.prepare('DELETE FROM temp WHERE key = ?');
+  const tempPrune = db.prepare('DELETE FROM temp WHERE expires_at <= ?');
+  // Starts a counter at 0, or restarts it if its window has expired; a live counter is left alone.
+  const tempStart = db.prepare(
+    'INSERT INTO temp (key, value, expires_at) VALUES (?, 0, ?) ON CONFLICT(key) DO UPDATE SET value = 0, expires_at = excluded.expires_at WHERE temp.expires_at <= ?',
+  );
+  const tempIncr = db.prepare('UPDATE temp SET value = CAST(value AS INTEGER) + 1 WHERE key = ? RETURNING value');
+  const incr = db.transaction((name, ttlSeconds) => {
+    const now = Date.now();
+    tempStart.run(name, now + ttlSeconds * 1000, now);
+    return Number(tempIncr.get(name).value);
+  });
+
+  return {
+    describe: () => ({ kind: 'sqlite', path: file, persistent: file !== ':memory:' }),
+    close: () => db.close(),
+    async hget(hash, field) {
+      const t = table(hash);
+      return (t ? t.get.get(field) : kvGet.get(hash, field))?.value ?? null;
+    },
+    async hgetall(hash) {
+      const t = table(hash);
+      const rows = t ? t.all.all() : kvAll.all(hash);
+      return Object.fromEntries(rows.map((r) => [r.key, r.value]));
+    },
+    async hset(hash, field, value) {
+      const t = table(hash);
+      if (t) t.put.run(field, value);
+      else kvPut.run(hash, field, value);
+    },
+    async hsetnx(hash, field, value) {
+      const t = table(hash);
+      return (t ? t.putNew.run(field, value) : kvPutNew.run(hash, field, value)).changes === 1;
+    },
+    async hdel(hash, field) {
+      const t = table(hash);
+      if (t) t.del.run(field);
+      else kvDel.run(hash, field);
+    },
+    async setTemp(name, value, ttlSeconds) {
+      const now = Date.now();
+      tempPrune.run(now);
+      tempSet.run(name, String(value), now + ttlSeconds * 1000);
+    },
+    async getTemp(name) {
+      return tempGet.get(name, Date.now())?.value ?? null;
+    },
+    async delTemp(name) {
+      tempDel.run(name);
+    },
+    async incrTemp(name, ttlSeconds) {
+      return incr(name, ttlSeconds);
+    },
+  };
 }
 
 export function createMemoryStore() {

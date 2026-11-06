@@ -7,14 +7,16 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createVolunteerApi } from '../backend/volunteers/api.js';
 import { loadConfig } from '../backend/volunteers/config.js';
-import { createMemoryStore, createStore } from '../backend/volunteers/store.js';
+import { createMemoryStore, createStore, sqliteStore } from '../backend/volunteers/store.js';
+import { createRequire } from 'node:module';
 import { cityField, indianMobile, verhoeffValid } from '../backend/volunteers/validate.js';
 import { computeStats } from '../backend/volunteers/ranking.js';
 import vercelHandler from '../api/v1.js';
 
 // The Vercel handler builds its own API from env vars; keep its file store out of the repo.
 process.env.VOLUNTEER_DB_FILE = join(tmpdir(), 'newbi-volunteer-test-unused.json');
-process.env.SEED_DEMO_EVENTS = 'false';
+process.env.SQLITE_FILE = ':memory:';
+process.env.DEMO_MODE = 'false';
 
 // Appends the Verhoeff check digit to an 11-digit prefix.
 function aadhaar(prefix) {
@@ -22,10 +24,10 @@ function aadhaar(prefix) {
   throw new Error('unreachable');
 }
 
-function setup() {
+function setup({ store = sqliteStore(':memory:') } = {}) {
   let clock = new Date('2026-11-06T06:30:00Z'); // 12:00 in India
-  const config = { ...loadConfig({}), otpDevMode: true, adminApiKey: 'test-admin-key', seedDemoEvents: false };
-  const api = createVolunteerApi({ config, store: createMemoryStore(), sendSms: null, now: () => clock });
+  const config = { ...loadConfig({}), otpDevMode: true, adminApiKey: 'test-admin-key', demoMode: false };
+  const api = createVolunteerApi({ config, store, sendSms: null, now: () => clock });
   const call = async (method, path, { body, token, query } = {}) => {
     const res = await api.handle({
       method,
@@ -321,41 +323,112 @@ test('withdrawing and re-applying, and event capacity edits', async () => {
   assert.equal(back.application.status, 'applied');
 });
 
-test('prototype defaults: hardcoded secrets, dev OTP, demo events seeded once', async () => {
+test('prototype defaults: hardcoded secrets, dev OTP, demo mode on', () => {
   const prod = loadConfig({ VERCEL: '1' });
   assert.ok(prod.appSecret.length >= 32);
   assert.equal(prod.adminApiKey, 'newbi-admin-2026');
   assert.equal(prod.otpDevMode, true);
   assert.equal(prod.usingPrototypeSecrets, true);
-  const overridden = loadConfig({ VERCEL: '1', APP_SECRET: 'x'.repeat(40), ADMIN_API_KEY: 'mine', OTP_DEV_MODE: 'false' });
+  assert.equal(prod.demoMode, true);
+  const overridden = loadConfig({ VERCEL: '1', APP_SECRET: 'x'.repeat(40), ADMIN_API_KEY: 'mine', OTP_DEV_MODE: 'false', DEMO_MODE: 'false' });
   assert.equal(overridden.adminApiKey, 'mine');
   assert.equal(overridden.otpDevMode, false);
   assert.equal(overridden.usingPrototypeSecrets, false);
+  assert.equal(overridden.demoMode, false);
+});
 
-  const store = createMemoryStore();
-  const now = () => new Date('2026-11-06T06:30:00Z');
-  const config = { ...loadConfig({}), seedDemoEvents: true };
-  const api = createVolunteerApi({ config, store, sendSms: null, now });
-  const call = async (method, path, { body, token } = {}) =>
-    (await api.handle({ method, path, query: new URLSearchParams(), headers: token ? { authorization: `Bearer ${token}` } : {}, body: body && JSON.stringify(body) })).body;
+// Two API copies with separate stores, like two copies of the function on Vercel.
+function demoCopies({ store } = {}) {
+  let clock = new Date('2026-11-06T06:30:00Z');
+  const config = { ...loadConfig({}), demoMode: true };
+  const make = (s) => {
+    const api = createVolunteerApi({ config, store: s, sendSms: null, now: () => clock });
+    return async (method, path, { body, token, query } = {}) => {
+      const res = await api.handle({ method, path, query: new URLSearchParams(query ?? {}), headers: token ? { authorization: `Bearer ${token}` } : {}, body: body && JSON.stringify(body) });
+      return { status: res.status, ...res.body };
+    };
+  };
+  return { a: make(store ?? createMemoryStore()), b: make(createMemoryStore()), setDate: (d) => (clock = new Date(`${d}T06:30:00Z`)) };
+}
 
-  const health = await call('GET', '/health');
-  assert.equal(health.status, 'ok');
-  const cities = (await call('GET', '/cities')).cities;
+test('demo login: fixed OTP and the same populated dashboard on every server copy', async () => {
+  const { a, b, setDate } = demoCopies();
+
+  const health = await a('GET', '/health');
+  assert.deepEqual(health.demoLogin, { phone: '99999 99999', otp: '123456' });
+
+  // Code requested on copy A, checked on copy B: nothing needs to be shared.
+  const sent = await a('POST', '/auth/send-otp', { body: { phone: '99999 99999' } });
+  assert.equal(sent.devOtp, '123456');
+  assert.equal((await a('POST', '/auth/send-otp', { body: { phone: '9999999999' } })).status, 200, 'no resend cooldown for the demo');
+  assert.equal((await b('POST', '/auth/verify-otp', { body: { phone: '9999999999', otp: '111111' } })).error.code, 'wrong_otp');
+  const login = await b('POST', '/auth/verify-otp', { body: { phone: '9999999999', otp: '123456' } });
+  assert.equal(login.isNewUser, false);
+  assert.equal(login.volunteer.name, 'Riya Kapoor');
+  assert.equal(login.volunteer.demo, true);
+
+  const meA = await a('GET', '/volunteer/me', { token: login.token });
+  const meB = await b('GET', '/volunteer/me', { token: login.token });
+  assert.deepEqual(meA.volunteer, meB.volunteer);
+  assert.equal(meA.demoReadOnly, true, 'memory storage is not kept, so the demo is view-only');
+  const s = meA.volunteer.stats;
+  assert.deepEqual([s.points, s.tier, s.completedEvents, s.averageRating], [55, 'Silver', 3, 4.7]);
+  assert.deepEqual(meA.volunteer.standing.city, { name: 'Delhi', rank: 2, rankedVolunteers: 5 });
+  assert.equal(meA.volunteer.kyc.status, 'verified');
+
+  const eventsA = await a('GET', '/volunteer/events', { token: login.token });
+  const eventsB = await b('GET', '/volunteer/events', { token: login.token });
+  assert.deepEqual(eventsA.events, eventsB.events);
+  assert.deepEqual(eventsA.events.map((e) => [e.title, e.date, e.myApplication?.status ?? null, e.slotsLeft]), [
+    ['Diwali Night Market', '2026-11-09', 'approved', 18],
+    ['Campus Fest Pro Night', '2026-11-16', null, 30],
+  ]);
+
+  const history = await b('GET', '/volunteer/applications', { token: login.token });
+  assert.deepEqual(history.applications.map((x) => [x.event.title, x.status, x.review?.rating ?? null]), [
+    ['Diwali Night Market', 'approved', null],
+    ['Sneaker Drop Pop-up', 'completed', 5],
+    ['College Fest: Spring Edition', 'completed', 4],
+    ['Holi Colour Fest', 'completed', 5],
+  ]);
+
+  const board = await a('GET', '/leaderboard', { token: login.token });
+  assert.deepEqual(board.leaderboard.map((r) => [r.rank, r.name, r.points]), [
+    [1, 'Arjun M.', 60], [2, 'Riya K.', 55], [3, 'Sana K.', 35], [4, 'Kabir S.', 35], [5, 'Meera I.', 5],
+  ]);
+  assert.equal(board.you.rank, 2);
+
+  const blocked = await a('POST', `/volunteer/events/${eventsA.events[1].id}/apply`, { token: login.token });
+  assert.equal(blocked.status, 403);
+  assert.equal(blocked.error.code, 'demo_read_only');
+  assert.equal((await a('PATCH', '/volunteer/me', { token: login.token, body: { city: 'Mumbai' } })).error.code, 'demo_read_only');
+
+  // Real sign-ups still see the demo events in their city.
+  const cities = (await b('GET', '/cities')).cities;
   assert.ok(cities.some((c) => c.city === 'Delhi' && c.upcomingEvents === 2));
-  assert.ok(cities.some((c) => c.city === 'Bengaluru'));
 
-  const sent = await call('POST', '/auth/send-otp', { body: { phone: '9876543210' } });
-  const verified = await call('POST', '/auth/verify-otp', { body: { phone: '9876543210', otp: sent.devOtp } });
-  const reg = await call('POST', '/auth/register', { token: verified.registrationToken, body: profile() });
-  const events = await call('GET', '/volunteer/events', { token: reg.token });
-  assert.deepEqual(events.events.map((e) => e.title), ['Diwali Night Market', 'Campus Fest Pro Night']);
-  assert.deepEqual(events.events.map((e) => e.date), ['2026-11-09', '2026-11-16']);
+  // The next day the demo is rewritten with fresh dates.
+  setDate('2026-11-07');
+  const tomorrow = await a('GET', '/volunteer/events', { token: login.token });
+  assert.equal(tomorrow.events[0].date, '2026-11-10');
+});
 
-  // A second API instance on the same store (another server instance) doesn't seed again.
-  const again = createVolunteerApi({ config, store, sendSms: null, now });
-  await again.handle({ method: 'GET', path: '/health', headers: {} });
-  assert.equal(Object.keys(await store.hgetall('events')).length, 10);
+test('demo account can apply where storage is kept (local SQLite)', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'vol-demo-'));
+  const store = sqliteStore(join(dir, 'newbi.sqlite'));
+  try {
+    const { a } = demoCopies({ store });
+    const login = await a('POST', '/auth/verify-otp', { body: { phone: '9999999999', otp: '123456' } });
+    const me = await a('GET', '/volunteer/me', { token: login.token });
+    assert.equal(me.demoReadOnly, false);
+    const events = await a('GET', '/volunteer/events', { token: login.token });
+    const applied = await a('POST', `/volunteer/events/${events.events[1].id}/apply`, { token: login.token });
+    assert.equal(applied.status, 201);
+    assert.equal(applied.application.status, 'applied');
+  } finally {
+    store.close();
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test('router: 404, 405, bad JSON, bad tokens, endpoint index', async () => {
@@ -366,6 +439,91 @@ test('router: 404, 405, bad JSON, bad tokens, endpoint index', async () => {
   assert.equal((await call('GET', '/volunteer/me', { token: 'abc.def.ghi' })).status, 401);
   const index = await call('GET', '/');
   assert.ok(index.endpoints.some((e) => e.path === '/api/v1/volunteer/events' && e.auth === 'volunteer'));
+});
+
+test('SQLite store: readable tables, uniqueness, counters, expiry and restarts', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'vol-sqlite-'));
+  const file = join(dir, 'newbi.sqlite');
+  const a = sqliteStore(file);
+  try {
+    await a.hset('volunteers', 'vol_1', JSON.stringify({ id: 'vol_1', name: 'Rahul', city: 'Delhi', kyc: { status: 'pending' } }));
+    await a.hset('volunteers', 'vol_1', JSON.stringify({ id: 'vol_1', name: 'Rahul', city: 'Delhi', kyc: { status: 'verified' } }));
+    assert.equal(await a.hsetnx('idx:phone', '+919876543210', 'vol_1'), true);
+    assert.equal(await a.hsetnx('idx:phone', '+919876543210', 'vol_2'), false);
+    assert.equal(await a.hget('idx:phone', 'constructor'), null);
+    assert.equal(await a.incrTemp('rate', 60), 1);
+    assert.equal(await a.incrTemp('rate', 60), 2);
+    await a.setTemp('otp', 'hash', 60);
+    assert.equal(await a.getTemp('otp'), 'hash');
+    await a.setTemp('expired', 'x', -1);
+    assert.equal(await a.getTemp('expired'), null);
+    assert.equal(await a.incrTemp('expired', 60), 1, 'an expired counter starts again');
+    await a.hdel('idx:phone', '+919876543210');
+    assert.deepEqual(await a.hgetall('idx:phone'), {});
+    a.close();
+
+    const b = sqliteStore(file); // a server restart
+    assert.equal(JSON.parse(await b.hget('volunteers', 'vol_1')).kyc.status, 'verified');
+    assert.equal(await b.getTemp('otp'), 'hash');
+    b.close();
+
+    const Database = createRequire(import.meta.url)('better-sqlite3');
+    const raw = new Database(file, { readonly: true });
+    assert.deepEqual(raw.prepare('SELECT id, name, city, kyc_status FROM volunteers').get(), {
+      id: 'vol_1', name: 'Rahul', city: 'Delhi', kyc_status: 'verified',
+    });
+    raw.close();
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('SQLite: the whole flow survives an API restart', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'vol-sqlite-flow-'));
+  const file = join(dir, 'newbi.sqlite');
+  const opened = [];
+  const open = () => {
+    const store = sqliteStore(file);
+    opened.push(store);
+    return store;
+  };
+  try {
+    const first = setup({ store: open() });
+    const v = await first.signUp('9876543210', profile());
+    const admin = await first.adminToken();
+    const { event } = await first.call('POST', '/admin/events', {
+      token: admin,
+      body: { title: 'Diwali Mela', city: 'Delhi', venue: 'JLN Stadium', date: '2026-11-08', volunteersNeeded: 5 },
+    });
+    const { application } = await first.call('POST', `/volunteer/events/${event.id}/apply`, { token: v.token });
+    await first.call('PATCH', `/admin/volunteers/${v.volunteer.id}`, { token: admin, body: { kycStatus: 'verified' } });
+    await first.call('POST', `/admin/applications/${application.id}/decision`, { token: admin, body: { decision: 'approve' } });
+    first.setDate('2026-11-08');
+    const review = await first.call('POST', `/admin/applications/${application.id}/review`, {
+      token: await first.adminToken(),
+      body: { outcome: 'completed', rating: 5 },
+    });
+    assert.equal(review.volunteerStats.points, 20);
+    opened.pop().close();
+
+    // New server process, same database file: the volunteer signs straight back in.
+    const second = setup({ store: open() });
+    // The 30 s resend cooldown is stored too and survives the restart; skip it.
+    assert.ok(await second.api.svc.store.getTemp('otp:cooldown:+919876543210'));
+    await second.api.svc.store.delTemp('otp:cooldown:+919876543210');
+    const sent = await second.call('POST', '/auth/send-otp', { body: { phone: '9876543210' } });
+    const back = await second.call('POST', '/auth/verify-otp', { body: { phone: '9876543210', otp: sent.devOtp } });
+    assert.equal(back.isNewUser, false);
+    assert.equal(back.volunteer.id, v.volunteer.id);
+    const me = await second.call('GET', '/volunteer/me', { token: back.token });
+    assert.equal(me.volunteer.stats.points, 20);
+    assert.equal(me.volunteer.standing.city.rank, 1);
+    const history = await second.call('GET', '/volunteer/applications', { token: back.token });
+    assert.equal(history.applications[0].status, 'completed');
+  } finally {
+    for (const store of opened) store.close();
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test('file store keeps data across restarts', async () => {

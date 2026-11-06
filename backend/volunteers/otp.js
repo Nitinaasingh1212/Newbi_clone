@@ -4,6 +4,11 @@ import { randomInt } from 'node:crypto';
 import { LIMITS } from './config.js';
 import { HttpError, badRequest } from './validate.js';
 import { keyedHash, safeEqual } from './tokens.js';
+import { DEMO_LOGIN } from './demo-data.js';
+
+// The demo account always uses the same code, never gets an SMS and needs nothing stored,
+// so it signs in on any server instance.
+const isDemoPhone = (config, phone) => config.demoMode && phone === DEMO_LOGIN.phone;
 
 const keys = (phone) => ({
   code: `otp:code:${phone}`,
@@ -14,6 +19,7 @@ const keys = (phone) => ({
 
 // Returns { devOtp } in dev mode, otherwise sends the SMS and returns {}.
 export async function issueOtp({ store, config, sendSms }, phone, ip) {
+  if (isDemoPhone(config, phone)) return { devOtp: DEMO_LOGIN.otp, demo: true };
   if (!config.otpDevMode && !sendSms) {
     throw new HttpError(503, 'sms_not_configured', 'SMS sending is not set up on the server yet.');
   }
@@ -58,6 +64,12 @@ export async function issueOtp({ store, config, sendSms }, phone, ip) {
 export async function checkOtp({ store, config }, phone, otp) {
   const code = String(otp ?? '').trim();
   if (!/^\d{6}$/.test(code)) throw badRequest('invalid_otp', 'Enter the 6-digit code.', { field: 'otp' });
+  if (isDemoPhone(config, phone)) {
+    if (code !== DEMO_LOGIN.otp) {
+      throw badRequest('wrong_otp', `That code is incorrect. The demo account's code is ${DEMO_LOGIN.otp}.`, { attemptsLeft: LIMITS.otpMaxAttempts });
+    }
+    return;
+  }
   const k = keys(phone);
 
   const stored = await store.getTemp(k.code);
