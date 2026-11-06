@@ -2,6 +2,7 @@
 
 The volunteer API serves the on-ground volunteers and workers who help the coordination team at events. Volunteers sign up with their phone (OTP) and Aadhaar, and they see and apply to events in **their city only**. After each event, the coordination team rates them, and those ratings feed a points-based ranking.
 
+- **Volunteer UI:** https://newbi-clone.vercel.app/volunteer (`site/volunteer/index.html`) is built on these endpoints.
 - **Base URL:** `https://newbi-clone.vercel.app/api/v1` (locally `http://localhost:3000/api/v1`)
 - **Format:** JSON in, JSON out. Every response has `success: true|false`.
 - **Auth:** `Authorization: Bearer <token>`. Volunteers get a token from the OTP flow. Admins get one from `/admin/login`.

@@ -1,0 +1,30 @@
+<style>
+  .nbv-bar { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 42px; padding: 9px 16px; background: #030712; color: #fff; font: 500 14px/1.35 Inter, system-ui, sans-serif; text-align: center; text-decoration: none; }
+  .nbv-bar:hover .nbv-go, .nbv-bar:focus-visible .nbv-go { text-decoration: underline; text-underline-offset: 3px; }
+  .nbv-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #39FF14; box-shadow: 0 0 0 3px rgba(57, 255, 20, .25); }
+  .nbv-go { font-weight: 700; white-space: nowrap; }
+  .nbv-short { display: none; }
+  html.dark .nbv-bar { background: #39FF14; color: #000; }
+  html.dark .nbv-dot { background: #000; box-shadow: none; }
+  .nbv-fab { position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 60; display: inline-flex; align-items: center; gap: 8px; height: 50px; padding: 0 22px; border-radius: 999px; background: #030712; color: #fff; font: 700 15px/1 Manrope, Inter, system-ui, sans-serif; text-decoration: none; box-shadow: 0 12px 32px rgba(0, 0, 0, .28); opacity: 0; transform: translateY(14px); pointer-events: none; transition: opacity .2s, transform .2s; }
+  .nbv-fab.nbv-on { opacity: 1; transform: none; pointer-events: auto; }
+  .nbv-fab:hover { transform: scale(1.03); }
+  html.dark .nbv-fab { background: #39FF14; color: #000; }
+  @media (max-width: 560px) { .nbv-long { display: none; } .nbv-short { display: inline; } }
+  @media (prefers-reduced-motion: reduce) { .nbv-fab { transition: none; } }
+</style>
+<a class="nbv-bar" href="/volunteer">
+  <span class="nbv-dot" aria-hidden="true"></span>
+  <span><span class="nbv-long">Now recruiting volunteers for concerts, fests and brand activations in your city.</span><span class="nbv-short">Volunteer at events in your city.</span></span>
+  <span class="nbv-go">Register &rarr;</span>
+</a>
+<a class="nbv-fab" href="/volunteer" tabindex="-1">Volunteer with us <span aria-hidden="true">&rarr;</span></a>
+<script>
+  (function () {
+    var fab = document.querySelector('.nbv-fab');
+    if (!fab) return;
+    var update = function () { fab.classList.toggle('nbv-on', window.scrollY > window.innerHeight * 0.8); };
+    window.addEventListener('scroll', update, { passive: true });
+    update();
+  })();
+</script>

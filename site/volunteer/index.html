@@ -1,0 +1,1010 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <!-- Volunteer portal: sign up / sign in with phone OTP, register with Aadhaar, then see and
+       apply to events in your city. Talks to the volunteer API at /api/v1 (backend/volunteers). -->
+  <script>
+    (function () {
+      try {
+        var saved = null;
+        try { saved = localStorage.getItem('nb_theme'); } catch (e) {}
+        var dark = saved === 'dark' || (!saved && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.classList.toggle('dark', !!dark);
+      } catch (e) {}
+    })();
+  </script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="color-scheme" content="light dark" />
+  <title>Volunteer with Newbi — newbi.live</title>
+  <meta name="description" content="Work concerts, college fests and brand activations in your city. Register as a Newbi volunteer with your phone number and Aadhaar, apply to events and climb the leaderboard." />
+  <link rel="icon" type="image/png" sizes="32x32" href="/brand/favicon-32.png" />
+  <link rel="icon" type="image/svg+xml" sizes="any" href="/brand/favicon.svg" />
+  <link rel="apple-touch-icon" href="/brand/newbi-icon-app-180.png" />
+  <link rel="preload" href="/assets/manrope-latin-800-normal-BfWYOv1c.woff2" as="font" type="font/woff2" crossorigin />
+  <style>
+    @font-face { font-family: Manrope; font-weight: 600; font-display: swap; src: url(/assets/manrope-latin-600-normal-4f0koTD-.woff2) format('woff2'); }
+    @font-face { font-family: Manrope; font-weight: 700; font-display: swap; src: url(/assets/manrope-latin-700-normal-BZp_XxE4.woff2) format('woff2'); }
+    @font-face { font-family: Manrope; font-weight: 800; font-display: swap; src: url(/assets/manrope-latin-800-normal-BfWYOv1c.woff2) format('woff2'); }
+    @font-face { font-family: Inter; font-weight: 400; font-display: swap; src: url(/assets/inter-latin-400-normal-C38fXH4l.woff2) format('woff2'); }
+    @font-face { font-family: Inter; font-weight: 500; font-display: swap; src: url(/assets/inter-latin-500-normal-Cerq10X2.woff2) format('woff2'); }
+    @font-face { font-family: Inter; font-weight: 600; font-display: swap; src: url(/assets/inter-latin-600-normal-LgqL8muc.woff2) format('woff2'); }
+
+    :root {
+      --bg: #F4F2EC; --surface: #FFFFFF; --surface-2: #ECE9E1;
+      --text: #030712; --muted: #57534E; --line: rgba(3, 7, 18, .1); --line-strong: rgba(3, 7, 18, .22);
+      --btn: #030712; --btn-text: #FFFFFF; --accent: #39FF14; --bar: #030712; --focus: #030712;
+      --ok-bg: #E2F3DE; --ok: #166534; --warn-bg: #FBEFD3; --warn: #8A4B08; --bad-bg: #FBE3E0; --bad: #B42318;
+    }
+    html.dark {
+      --bg: #050505; --surface: #0E0E0E; --surface-2: #181818;
+      --text: #FFFFFF; --muted: #A1A1AA; --line: rgba(255, 255, 255, .1); --line-strong: rgba(255, 255, 255, .24);
+      --btn: #FFFFFF; --btn-text: #000000; --bar: #39FF14; --focus: #39FF14;
+      --ok-bg: rgba(57, 255, 20, .12); --ok: #8DFF73; --warn-bg: rgba(251, 191, 36, .13); --warn: #FCD34D; --bad-bg: rgba(248, 113, 113, .13); --bad: #FCA5A5;
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 400 16px/1.55 Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+    a { color: inherit; }
+    h1, h2, h3 { font-family: Manrope, Inter, system-ui, sans-serif; margin: 0; letter-spacing: -.03em; }
+    p { margin: 0; }
+    [hidden] { display: none !important; }
+    :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+    .wrap { max-width: 1160px; margin: 0 auto; padding: 0 16px; }
+    @media (min-width: 640px) { .wrap { padding: 0 24px; } }
+    .muted { color: var(--muted); }
+    .label { font: 600 11px/1.2 Inter, system-ui, sans-serif; text-transform: uppercase; letter-spacing: .2em; color: var(--muted); }
+    .stack > * + * { margin-top: 12px; }
+
+    /* Header */
+    .top { position: sticky; top: 0; z-index: 20; border-bottom: 1px solid var(--line); background: var(--bg); padding-top: env(safe-area-inset-top, 0px); }
+    .top .wrap { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 64px; }
+    .brand { display: inline-flex; align-items: center; gap: 12px; text-decoration: none; min-height: 44px; }
+    .brand img { height: 30px; width: auto; display: block; }
+    .brand .logo-dark, html.dark .brand .logo-light { display: none; }
+    html.dark .brand .logo-dark { display: block; }
+    .brand .label { border-left: 1px solid var(--line-strong); padding-left: 12px; }
+    .top-actions { display: flex; align-items: center; gap: 4px; }
+    .icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 0; border-radius: 12px; background: none; color: var(--text); cursor: pointer; }
+    .icon-btn:hover { background: var(--surface-2); }
+
+    /* Layout */
+    .layout { display: grid; gap: 40px; padding: 40px 0 88px; }
+    @media (min-width: 960px) {
+      .layout { grid-template-columns: minmax(0, 1fr) minmax(0, 500px); gap: 72px; padding-top: 72px; align-items: start; }
+      .intro { position: sticky; top: 112px; }
+    }
+    .layout.is-dashboard { grid-template-columns: minmax(0, 1fr); padding-top: 40px; }
+    .layout.is-dashboard .intro { display: none; }
+    .intro h1 { margin-top: 16px; font-weight: 800; font-size: clamp(2.6rem, 7vw, 4.6rem); line-height: .95; letter-spacing: -.045em; }
+    .intro .lead { margin-top: 20px; font-size: 18px; max-width: 34rem; color: var(--muted); }
+    .steps { list-style: none; margin: 32px 0 0; padding: 0; display: grid; gap: 14px; max-width: 32rem; }
+    .steps li { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 14px; align-items: start; }
+    .steps .n { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: var(--btn); color: var(--btn-text); font: 700 14px/1 Manrope, sans-serif; }
+    html.dark .steps .n { background: var(--accent); color: #000; }
+    .steps b { display: block; font-family: Manrope, sans-serif; }
+    .steps span.muted { font-size: 15px; }
+
+    /* Card + forms */
+    .card { background: var(--surface); border: 1px solid var(--line); border-radius: 24px; padding: 24px; }
+    @media (min-width: 640px) { .card { padding: 32px; } }
+    .card h2 { margin-top: 10px; font-weight: 800; font-size: 30px; line-height: 1.05; }
+    .card > form > p.muted, .card > div > p.muted { margin-top: 10px; }
+    .field { display: grid; gap: 6px; margin-top: 18px; }
+    .field > label, .field-label { font-weight: 600; font-size: 14px; }
+    .optional { font-weight: 400; color: var(--muted); }
+    .input { width: 100%; height: 48px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--bg); color: var(--text); font: inherit; font-size: 16px; }
+    .input:focus { outline: 2px solid var(--focus); outline-offset: 0; border-color: transparent; }
+    .input[aria-invalid="true"] { border-color: var(--bad); }
+    select.input { appearance: none; background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%); background-position: calc(100% - 20px) 21px, calc(100% - 15px) 21px; background-size: 5px 5px; background-repeat: no-repeat; padding-right: 36px; }
+    .input.sm { height: 40px; font-size: 14px; border-radius: 999px; padding-left: 16px; width: auto; max-width: 100%; }
+    .hint { font-size: 13px; color: var(--muted); }
+    .err { font-size: 13px; color: var(--bad); }
+    .err:empty { display: none; }
+    .form-error { margin-top: 16px; }
+    .phone-row { display: flex; }
+    .phone-row .prefix { display: inline-flex; align-items: center; padding: 0 14px; border: 1px solid var(--line-strong); border-right: 0; border-radius: 12px 0 0 12px; background: var(--surface-2); font-weight: 600; }
+    .phone-row .input { border-radius: 0 12px 12px 0; }
+    .otp-input { height: 64px; text-align: center; letter-spacing: .45em; font: 600 26px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; padding-left: .45em; }
+    .grid2 { display: grid; gap: 0 16px; }
+    @media (min-width: 520px) { .grid2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+    fieldset { border: 0; padding: 0; margin: 32px 0 0; min-width: 0; }
+    /* float keeps the legend out of the fieldset border so spacing stays even */
+    legend { float: left; width: 100%; padding: 0 0 14px; border-bottom: 1px solid var(--line); font: 600 11px/1.2 Inter, sans-serif; text-transform: uppercase; letter-spacing: .2em; color: var(--muted); }
+    legend + * { clear: both; }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip { position: relative; }
+    .chip input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+    .chip span { display: inline-flex; align-items: center; min-height: 38px; padding: 6px 14px; border: 1px solid var(--line-strong); border-radius: 999px; font-size: 14px; cursor: pointer; user-select: none; }
+    .chip input:checked + span { background: var(--btn); color: var(--btn-text); border-color: transparent; }
+    .chip input:focus-visible + span { outline: 2px solid var(--focus); outline-offset: 2px; }
+    .check { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 10px; align-items: start; margin-top: 24px; font-size: 14px; }
+    .check input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--btn); }
+
+    /* Buttons */
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 52px; padding: 0 28px; border: 0; border-radius: 999px; background: var(--btn); color: var(--btn-text); font: 700 16px/1 Manrope, Inter, sans-serif; text-decoration: none; cursor: pointer; transition: transform .15s ease, opacity .15s; }
+    .btn:hover { transform: scale(1.02); }
+    .btn:active { transform: scale(.98); }
+    .btn[disabled] { opacity: .5; cursor: progress; transform: none; }
+    .btn.block { width: 100%; margin-top: 24px; }
+    .btn.sm { height: 40px; padding: 0 18px; font-size: 14px; }
+    .btn.ghost { background: transparent; color: var(--text); box-shadow: inset 0 0 0 1px var(--line-strong); }
+    .linkbtn { background: none; border: 0; padding: 0; color: inherit; font: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+    .linkbtn[disabled] { text-decoration: none; color: var(--muted); font-weight: 400; cursor: default; }
+    .center { text-align: center; margin-top: 16px; }
+
+    /* Notices */
+    .notice { border-radius: 14px; padding: 12px 14px; font-size: 14px; margin-top: 16px; background: var(--surface-2); }
+    .notice.ok { background: var(--ok-bg); color: var(--ok); }
+    .notice.warn { background: var(--warn-bg); color: var(--warn); }
+    .notice.bad { background: var(--bad-bg); color: var(--bad); }
+    .notice b { font-weight: 700; }
+    .notice .actions { margin-top: 10px; }
+
+    /* Dashboard */
+    .dash-head h1 { margin-top: 10px; font-weight: 800; font-size: clamp(2.2rem, 6vw, 3.6rem); line-height: 1; letter-spacing: -.045em; }
+    .dash-head p { margin-top: 12px; }
+    .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 28px; }
+    @media (min-width: 760px) { .stats { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+    .stat { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 16px; min-width: 0; }
+    .stat b { display: block; font: 800 28px/1.1 Manrope, sans-serif; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+    .stat span { font-size: 13px; color: var(--muted); }
+    .tier { margin-top: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 16px; }
+    .tier-row { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; flex-wrap: wrap; }
+    .bar { height: 8px; border-radius: 99px; background: var(--surface-2); overflow: hidden; margin-top: 10px; }
+    .bar i { display: block; height: 100%; background: var(--text); border-radius: 99px; }
+    html.dark .bar i { background: var(--accent); }
+    .tabs { display: flex; gap: 4px; margin-top: 36px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+    .tab { flex: none; height: 46px; padding: 0 14px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted); font: 600 15px/1 Inter, sans-serif; cursor: pointer; }
+    .tab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--text); }
+    .narrow { display: none; }
+    @media (max-width: 560px) {
+      .tab { padding: 0 10px; font-size: 14px; }
+      .wide { display: none; }
+      .narrow { display: inline; }
+      .stats .stat:last-child { grid-column: span 2; }
+    }
+    .panel { margin-top: 20px; display: grid; gap: 12px; }
+    .item { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 18px; display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 16px; }
+    @media (min-width: 640px) { .item { padding: 22px; grid-template-columns: 72px minmax(0, 1fr); gap: 20px; } }
+    .datebox { text-align: center; border-radius: 14px; background: var(--surface-2); padding: 10px 0; align-self: start; }
+    .datebox b { display: block; font: 800 26px/1.1 Manrope, sans-serif; }
+    .datebox span { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); }
+    .item h3 { font-weight: 800; font-size: 20px; line-height: 1.2; }
+    .meta { margin-top: 4px; font-size: 14px; color: var(--muted); }
+    .desc { margin-top: 10px; font-size: 15px; }
+    .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; align-items: center; }
+    .tag { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 999px; background: var(--surface-2); font-size: 12px; font-weight: 600; }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 16px; }
+    .badge { display: inline-flex; align-items: center; min-height: 28px; padding: 4px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; background: var(--surface-2); }
+    .badge.ok { background: var(--ok-bg); color: var(--ok); }
+    .badge.warn { background: var(--warn-bg); color: var(--warn); }
+    .badge.bad { background: var(--bad-bg); color: var(--bad); }
+    .stars { color: var(--text); letter-spacing: .1em; }
+    html.dark .stars { color: var(--accent); }
+    .empty { text-align: center; padding: 48px 20px; border: 1px dashed var(--line-strong); border-radius: 20px; color: var(--muted); }
+    .empty b { display: block; color: var(--text); font: 800 20px/1.2 Manrope, sans-serif; margin-bottom: 6px; }
+    .lb-wrap { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; overflow-x: auto; }
+    table.lb { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+    .lb th, .lb td { padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+    .lb th { font-size: 11px; text-transform: uppercase; letter-spacing: .14em; color: var(--muted); font-weight: 600; }
+    .lb tr:last-child td { border-bottom: 0; }
+    .lb .num { text-align: right; }
+    .lb tr.me td { background: var(--surface-2); font-weight: 600; }
+    @media (max-width: 560px) { .lb .hide-sm { display: none; } }
+    details.rules { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 16px 18px; font-size: 14px; }
+    details.rules summary { cursor: pointer; font-weight: 600; }
+    details.rules ul { margin: 12px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+    .inline-form { margin-top: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 18px; }
+    .inline-form .row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+    .inline-form .row .input { flex: 1 1 220px; }
+
+    .footer { border-top: 1px solid var(--line); padding: 24px 0 calc(32px + env(safe-area-inset-bottom, 0px)); font-size: 13px; color: var(--muted); }
+    .footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: space-between; }
+    .toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 20px); opacity: 0; z-index: 30; max-width: calc(100% - 32px); padding: 12px 18px; border-radius: 999px; background: var(--btn); color: var(--btn-text); font-size: 14px; font-weight: 600; transition: opacity .2s, transform .2s; pointer-events: none; }
+    .toast.on { opacity: 1; transform: translate(-50%, 0); }
+    .spinner { padding: 64px 0; text-align: center; color: var(--muted); }
+    @media (prefers-reduced-motion: reduce) { .btn, .toast { transition: none; } .btn:hover, .btn:active { transform: none; } }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="/" aria-label="newbi.live home">
+        <img class="logo-light" src="/volunteer/logo-light.svg" alt="newbi.live" width="62" height="30" />
+        <img class="logo-dark" src="/volunteer/logo-dark.svg" alt="newbi.live" width="62" height="30" />
+        <span class="label">Volunteers</span>
+      </a>
+      <div class="top-actions">
+        <button class="icon-btn" type="button" id="theme" aria-label="Switch light or dark mode">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+        </button>
+        <button class="btn sm ghost" type="button" id="signout" hidden>Sign out</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="layout" id="layout">
+      <section class="intro" aria-labelledby="intro-title">
+        <span class="label">Newbi volunteers</span>
+        <h1 id="intro-title">Work the nights everyone remembers.</h1>
+        <p class="lead">Join the crew behind concerts, college fests and brand activations in your city. Verify once, pick the events you want to work, and get rated by the coordination team after every show.</p>
+        <ol class="steps">
+          <li><span class="n">1</span><span><b>Verify your phone</b><span class="muted">A 6-digit code on SMS. Same number signs you in later.</span></span></li>
+          <li><span class="n">2</span><span><b>Add your details and Aadhaar</b><span class="muted">Your city decides which events you see. The team checks your Aadhaar before your first event.</span></span></li>
+          <li><span class="n">3</span><span><b>Apply, show up, level up</b><span class="muted">Every completed event and rating earns points. Climb from Bronze to Platinum on your city's leaderboard.</span></span></li>
+        </ol>
+      </section>
+
+      <section id="app" aria-live="polite">
+        <div class="card spinner">Loading…</div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap">
+      <span>© <span id="year">2026</span> newbi.live · <a href="/">Back to home</a></span>
+      <span>We never store your full Aadhaar number, only its last 4 digits.</span>
+    </div>
+  </footer>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <datalist id="city-options"></datalist>
+
+  <script>
+    (function () {
+      'use strict';
+
+      var API = '/api/v1';
+      var TOKEN_KEY = 'nbv_token';
+      var REG_KEY = 'nbv_registration';
+      var TAB_KEY = 'nbv_tab';
+      var DEFAULT_CITIES = ['Delhi', 'Mumbai', 'Bengaluru', 'Hyderabad', 'Chennai', 'Kolkata', 'Pune', 'Ahmedabad', 'Jaipur', 'Lucknow', 'Chandigarh', 'Gurugram', 'Noida', 'Indore', 'Kochi', 'Goa'];
+      var SKILLS = ['Crowd management', 'Entry & ticketing', 'Registration desk', 'Hospitality', 'Backstage & artist care', 'Production & setup', 'Social media & content', 'Photography', 'First aid', 'Logistics'];
+      var STATUS = {
+        applied: { text: 'Waiting for approval', tone: 'warn' },
+        approved: { text: "You're on the team", tone: 'ok' },
+        rejected: { text: 'Not selected this time', tone: 'bad' },
+        withdrawn: { text: 'Withdrawn', tone: '' },
+        completed: { text: 'Completed', tone: 'ok' },
+        no_show: { text: 'Marked as no-show', tone: 'bad' }
+      };
+
+      var app = document.getElementById('app');
+      var layout = document.getElementById('layout');
+      var signOutBtn = document.getElementById('signout');
+      var toastEl = document.getElementById('toast');
+      var state = { flash: null, tab: read(localStorage, TAB_KEY) || 'events' };
+      var timers = [];
+
+      document.getElementById('year').textContent = new Date().getFullYear();
+
+      // ---- small helpers ---------------------------------------------------------------
+
+      function read(area, key) { try { return area.getItem(key); } catch (e) { return null; } }
+      function write(area, key, value) {
+        try { if (value == null) area.removeItem(key); else area.setItem(key, value); } catch (e) {}
+      }
+      function session() { try { return window.sessionStorage; } catch (e) { return null; } }
+
+      function esc(value) {
+        return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
+          return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+      }
+
+      function api(path, options) {
+        options = options || {};
+        var headers = {};
+        if (options.body) headers['Content-Type'] = 'application/json';
+        if (options.token) headers.Authorization = 'Bearer ' + options.token;
+        return fetch(API + path, { method: options.method || 'GET', headers: headers, body: options.body ? JSON.stringify(options.body) : undefined })
+          .catch(function () {
+            var e = new Error("Can't reach the server. Check your internet connection and try again.");
+            e.code = 'network';
+            throw e;
+          })
+          .then(function (res) {
+            return res.json().catch(function () { return null; }).then(function (data) {
+              if (data && data.success) return data;
+              var info = (data && data.error) || {};
+              var err = new Error(info.message || 'Something went wrong. Please try again.');
+              err.code = info.code || 'http_' + res.status;
+              err.status = res.status;
+              err.details = info.details || {};
+              throw err;
+            });
+          });
+      }
+
+      function toast(message) {
+        toastEl.textContent = message;
+        toastEl.classList.add('on');
+        clearTimeout(toast.t);
+        toast.t = setTimeout(function () { toastEl.classList.remove('on'); }, 3200);
+      }
+
+      function render(html, mode) {
+        timers.forEach(clearInterval);
+        timers = [];
+        app.innerHTML = html;
+        layout.classList.toggle('is-dashboard', mode === 'dashboard');
+        signOutBtn.hidden = mode !== 'dashboard';
+      }
+
+      function busy(button, label) {
+        var original = button.textContent;
+        button.disabled = true;
+        button.textContent = label;
+        return function () { button.disabled = false; button.textContent = original; };
+      }
+
+      function setFieldError(form, name, message) {
+        var input = form.querySelector('[name="' + name + '"]');
+        var slot = form.querySelector('[data-err="' + name + '"]');
+        if (input) input.setAttribute('aria-invalid', message ? 'true' : 'false');
+        if (slot) slot.textContent = message || '';
+        return Boolean(slot);
+      }
+      function clearErrors(form) {
+        form.querySelectorAll('[data-err]').forEach(function (el) { el.textContent = ''; });
+        form.querySelectorAll('[aria-invalid]').forEach(function (el) { el.setAttribute('aria-invalid', 'false'); });
+        var general = form.querySelector('.form-error');
+        if (general) general.textContent = '';
+      }
+      function formError(form, message) { form.querySelector('.form-error').textContent = message; }
+
+      function prettyPhone(phone) {
+        var m = /^\+91(\d{5})(\d{5})$/.exec(phone || '');
+        return m ? '+91 ' + m[1] + ' ' + m[2] : phone;
+      }
+      function localDate(iso) {
+        var p = iso.split('-').map(Number);
+        return new Date(p[0], p[1] - 1, p[2]);
+      }
+      function isoOf(date) {
+        var m = String(date.getMonth() + 1).padStart(2, '0');
+        var d = String(date.getDate()).padStart(2, '0');
+        return date.getFullYear() + '-' + m + '-' + d;
+      }
+      function prettyDate(iso) {
+        return localDate(iso).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+      }
+      function prettyTime(t) {
+        if (!t) return '';
+        var p = t.split(':');
+        var h = Number(p[0]);
+        var suffix = h >= 12 ? 'pm' : 'am';
+        h = h % 12 || 12;
+        return p[1] === '00' ? h + ' ' + suffix : h + ':' + p[1] + ' ' + suffix;
+      }
+      function timeRange(e) {
+        if (!e.startTime) return '';
+        return prettyTime(e.startTime) + (e.endTime ? ' – ' + prettyTime(e.endTime) : '');
+      }
+      function stars(n) {
+        return '<span class="stars" aria-label="Rated ' + n + ' out of 5">' + '★'.repeat(n) + '☆'.repeat(5 - n) + '</span>';
+      }
+
+      // Aadhaar numbers end in a Verhoeff check digit; checking here catches typos before submit.
+      var VD = [[0,1,2,3,4,5,6,7,8,9],[1,2,3,4,0,6,7,8,9,5],[2,3,4,0,1,7,8,9,5,6],[3,4,0,1,2,8,9,5,6,7],[4,0,1,2,3,9,5,6,7,8],[5,9,8,7,6,0,4,3,2,1],[6,5,9,8,7,1,0,4,3,2],[7,6,5,9,8,2,1,0,4,3],[8,7,6,5,9,3,2,1,0,4],[9,8,7,6,5,4,3,2,1,0]];
+      var VP = [[0,1,2,3,4,5,6,7,8,9],[1,5,7,6,2,8,3,0,9,4],[5,8,0,3,7,9,6,1,4,2],[8,9,1,6,0,4,3,5,2,7],[9,4,5,3,1,2,6,8,7,0],[4,2,8,6,5,7,3,9,0,1],[2,7,9,3,8,0,6,4,1,5],[7,0,4,6,9,1,3,2,5,8]];
+      function aadhaarValid(digits) {
+        if (!/^[2-9]\d{11}$/.test(digits)) return false;
+        var c = 0;
+        digits.split('').reverse().forEach(function (d, i) { c = VD[c][VP[i % 8][Number(d)]]; });
+        return c === 0;
+      }
+      function tenDigits(value) {
+        var digits = String(value).replace(/\D/g, '');
+        if (digits.length === 12 && digits.indexOf('91') === 0) digits = digits.slice(2);
+        if (digits.length === 11 && digits[0] === '0') digits = digits.slice(1);
+        return /^[6-9]\d{9}$/.test(digits) ? digits : null;
+      }
+
+      function token() { return read(localStorage, TOKEN_KEY); }
+
+      function loadCities() {
+        api('/cities').then(function (res) {
+          fillCities(res.cities.map(function (c) { return c.city; }));
+        }).catch(function () { fillCities([]); });
+      }
+      function fillCities(fromApi) {
+        var seen = {};
+        var all = fromApi.concat(DEFAULT_CITIES).filter(function (c) {
+          var k = c.toLowerCase();
+          if (seen[k]) return false;
+          seen[k] = true;
+          return true;
+        });
+        document.getElementById('city-options').innerHTML = all.map(function (c) { return '<option value="' + esc(c) + '"></option>'; }).join('');
+      }
+
+      // ---- views: sign in / sign up ----------------------------------------------------
+
+      function viewClosed(message) {
+        render(
+          '<div class="card"><span class="label">Registrations</span><h2>Opening soon</h2>' +
+          '<p class="muted">Volunteer sign-up is being set up right now. Check back shortly, or follow ' +
+          '<a href="https://www.instagram.com/newbi.live" rel="noopener">@newbi.live</a> for the announcement.</p>' +
+          (message ? '<p class="notice">' + esc(message) + '</p>' : '') + '</div>'
+        );
+      }
+
+      function viewPhone() {
+        var flash = state.flash;
+        state.flash = null;
+        render(
+          '<div class="card"><form id="f-phone" novalidate>' +
+          '<span class="label">Step 1 of 3</span>' +
+          '<h2>Sign up or sign in</h2>' +
+          '<p class="muted">New here? You\'ll set up your volunteer profile next. Already registered? You\'ll go straight to your events.</p>' +
+          (flash ? '<p class="notice warn">' + esc(flash) + '</p>' : '') +
+          '<div class="field"><label for="phone">Mobile number</label>' +
+          '<div class="phone-row"><span class="prefix">+91</span>' +
+          '<input class="input" id="phone" name="phone" type="tel" inputmode="numeric" autocomplete="tel-national" placeholder="98765 43210" maxlength="14" value="' + esc(state.phoneInput || '') + '" required></div>' +
+          '<p class="err" data-err="phone"></p></div>' +
+          '<p class="err form-error" role="alert"></p>' +
+          '<button class="btn block" type="submit">Send OTP</button>' +
+          '</form></div>'
+        );
+        var form = document.getElementById('f-phone');
+        form.addEventListener('submit', function (ev) {
+          ev.preventDefault();
+          clearErrors(form);
+          var raw = form.phone.value;
+          var digits = tenDigits(raw);
+          if (!digits) return setFieldError(form, 'phone', 'Enter a valid 10-digit Indian mobile number.');
+          state.phoneInput = raw;
+          var done = busy(form.querySelector('button[type=submit]'), 'Sending…');
+          api('/auth/send-otp', { method: 'POST', body: { phone: digits } })
+            .then(function (res) {
+              state.phone = res.phone;
+              state.devOtp = res.devOtp || null;
+              state.resendAt = Date.now() + res.resendAfterSeconds * 1000;
+              viewOtp();
+            })
+            .catch(function (err) {
+              done();
+              if (err.code === 'not_configured') return viewClosed();
+              formError(form, err.message);
+            });
+        });
+        form.phone.focus();
+      }
+
+      function viewOtp() {
+        render(
+          '<div class="card"><form id="f-otp" novalidate>' +
+          '<span class="label">Step 2 of 3</span>' +
+          '<h2>Enter the code</h2>' +
+          '<p class="muted">We sent a 6-digit code to <b>' + esc(prettyPhone(state.phone)) + '</b>. ' +
+          '<button type="button" class="linkbtn" id="change-phone">Change number</button></p>' +
+          (state.devOtp ? '<p class="notice"><b>Test mode:</b> SMS isn\'t switched on yet, so here is your code: <b>' + esc(state.devOtp) + '</b></p>' : '') +
+          '<div class="field"><label for="otp">One-time code</label>' +
+          '<input class="input otp-input" id="otp" name="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" value="' + esc(state.devOtp || '') + '" required>' +
+          '<p class="err" data-err="otp"></p></div>' +
+          '<p class="err form-error" role="alert"></p>' +
+          '<button class="btn block" type="submit">Verify</button>' +
+          '<p class="center muted"><button type="button" class="linkbtn" id="resend" disabled>Resend code</button></p>' +
+          '</form></div>'
+        );
+        var form = document.getElementById('f-otp');
+        var resend = document.getElementById('resend');
+        function tick() {
+          var left = Math.ceil((state.resendAt - Date.now()) / 1000);
+          resend.disabled = left > 0;
+          resend.textContent = left > 0 ? 'Resend code in ' + left + 's' : 'Resend code';
+        }
+        tick();
+        timers.push(setInterval(tick, 1000));
+
+        document.getElementById('change-phone').addEventListener('click', viewPhone);
+        resend.addEventListener('click', function () {
+          var done = busy(resend, 'Sending…');
+          api('/auth/send-otp', { method: 'POST', body: { phone: state.phone } })
+            .then(function (res) {
+              state.devOtp = res.devOtp || null;
+              state.resendAt = Date.now() + res.resendAfterSeconds * 1000;
+              toast('New code sent');
+              viewOtp();
+            })
+            .catch(function (err) { done(); tick(); formError(form, err.message); });
+        });
+        form.otp.addEventListener('input', function () { form.otp.value = form.otp.value.replace(/\D/g, '').slice(0, 6); });
+        form.addEventListener('submit', function (ev) {
+          ev.preventDefault();
+          clearErrors(form);
+          var code = form.otp.value.trim();
+          if (!/^\d{6}$/.test(code)) return setFieldError(form, 'otp', 'Enter the 6-digit code.');
+          var done = busy(form.querySelector('button[type=submit]'), 'Checking…');
+          api('/auth/verify-otp', { method: 'POST', body: { phone: state.phone, otp: code } })
+            .then(function (res) {
+              if (res.isNewUser) {
+                write(session(), REG_KEY, JSON.stringify({ token: res.registrationToken, phone: state.phone, expires: Date.now() + res.expiresInSeconds * 1000 }));
+                viewRegister();
+              } else {
+                write(localStorage, TOKEN_KEY, res.token);
+                loadDashboard();
+              }
+            })
+            .catch(function (err) {
+              done();
+              if (err.code === 'wrong_otp') {
+                var left = err.details.attemptsLeft;
+                return setFieldError(form, 'otp', left ? 'That code is incorrect. ' + left + ' attempt' + (left === 1 ? '' : 's') + ' left.' : err.message);
+              }
+              formError(form, err.message);
+            });
+        });
+        form.otp.focus();
+      }
+
+      function registration() {
+        try {
+          var reg = JSON.parse(read(session(), REG_KEY));
+          return reg && reg.expires > Date.now() ? reg : null;
+        } catch (e) { return null; }
+      }
+
+      function viewRegister() {
+        var reg = registration();
+        if (!reg) {
+          state.flash = 'Your verification expired. Verify your number again to continue.';
+          return viewPhone();
+        }
+        var maxDob = new Date();
+        maxDob.setFullYear(maxDob.getFullYear() - 18);
+        var skillChips = SKILLS.map(function (s) {
+          return '<label class="chip"><input type="checkbox" name="skills" value="' + esc(s) + '"><span>' + esc(s) + '</span></label>';
+        }).join('');
+
+        render(
+          '<div class="card"><form id="f-reg" novalidate>' +
+          '<span class="label">Step 3 of 3</span>' +
+          '<h2>Your volunteer profile</h2>' +
+          '<p class="muted">Signing up as <b>' + esc(prettyPhone(reg.phone)) + '</b>. Fields marked optional can be skipped.</p>' +
+
+          '<fieldset><legend>About you</legend>' +
+          '<div class="field"><label for="name">Full name <span class="optional">(as on your Aadhaar)</span></label>' +
+          '<input class="input" id="name" name="name" autocomplete="name" maxlength="80" required><p class="err" data-err="name"></p></div>' +
+          '<div class="grid2">' +
+          '<div class="field"><label for="dob">Date of birth</label>' +
+          '<input class="input" id="dob" name="dateOfBirth" type="date" max="' + isoOf(maxDob) + '" min="1925-01-01" required><p class="err" data-err="dateOfBirth"></p></div>' +
+          '<div class="field"><label for="gender">Gender <span class="optional">(optional)</span></label>' +
+          '<select class="input" id="gender" name="gender"><option value="">Select</option><option value="female">Female</option><option value="male">Male</option><option value="other">Other</option><option value="prefer_not_to_say">Prefer not to say</option></select></div>' +
+          '</div></fieldset>' +
+
+          '<fieldset><legend>Aadhaar</legend>' +
+          '<div class="field"><label for="aadhaar">Aadhaar number</label>' +
+          '<input class="input" id="aadhaar" name="aadhaarNumber" inputmode="numeric" autocomplete="off" placeholder="1234 5678 9012" maxlength="14" required>' +
+          '<p class="hint">We only keep the last 4 digits. Bring your Aadhaar card to your first event, and the team will match it to verify you.</p>' +
+          '<p class="err" data-err="aadhaarNumber"></p></div></fieldset>' +
+
+          '<fieldset><legend>Where you\'ll volunteer</legend>' +
+          '<div class="grid2">' +
+          '<div class="field"><label for="city">City</label>' +
+          '<input class="input" id="city" name="city" list="city-options" autocomplete="address-level2" placeholder="e.g. Delhi" maxlength="60" required>' +
+          '<p class="err" data-err="city"></p></div>' +
+          '<div class="field"><label for="area">Area <span class="optional">(optional)</span></label>' +
+          '<input class="input" id="area" name="area" placeholder="e.g. Saket" maxlength="80"></div>' +
+          '</div><p class="hint" style="margin-top:8px">You\'ll see events in this city. You can change it later.</p></fieldset>' +
+
+          '<fieldset><legend>Skills and contact</legend>' +
+          '<div class="field"><span class="field-label">What can you help with? <span class="optional">(optional)</span></span><div class="chips">' + skillChips + '</div></div>' +
+          '<div class="grid2">' +
+          '<div class="field"><label for="languages">Languages <span class="optional">(optional)</span></label>' +
+          '<input class="input" id="languages" name="languages" placeholder="Hindi, English" maxlength="200"></div>' +
+          '<div class="field"><label for="email">Email <span class="optional">(optional)</span></label>' +
+          '<input class="input" id="email" name="email" type="email" autocomplete="email" maxlength="254"><p class="err" data-err="email"></p></div>' +
+          '</div></fieldset>' +
+
+          '<fieldset><legend>Emergency contact <span class="optional" style="text-transform:none;letter-spacing:0">(optional)</span></legend>' +
+          '<div class="grid2">' +
+          '<div class="field"><label for="ec-name">Name</label><input class="input" id="ec-name" name="ecName" maxlength="80"><p class="err" data-err="ecName"></p></div>' +
+          '<div class="field"><label for="ec-phone">Mobile number</label><input class="input" id="ec-phone" name="ecPhone" type="tel" inputmode="numeric" maxlength="14"><p class="err" data-err="ecPhone"></p></div>' +
+          '</div>' +
+          '<div class="field"><label for="ec-rel">Relation</label><input class="input" id="ec-rel" name="ecRelation" placeholder="e.g. Mother" maxlength="40"></div>' +
+          '</fieldset>' +
+
+          '<label class="check"><input type="checkbox" name="consent" required><span>I confirm these details are mine and correct, and I agree to Newbi using my Aadhaar details to verify my identity for event volunteering.</span></label>' +
+          '<p class="err" data-err="consent"></p>' +
+          '<p class="err form-error" role="alert"></p>' +
+          '<button class="btn block" type="submit">Create volunteer profile</button>' +
+          '</form></div>'
+        );
+
+        var form = document.getElementById('f-reg');
+        form.aadhaarNumber.addEventListener('input', function () {
+          var d = form.aadhaarNumber.value.replace(/\D/g, '').slice(0, 12);
+          form.aadhaarNumber.value = d.replace(/(\d{4})(?=\d)/g, '$1 ');
+        });
+
+        form.addEventListener('submit', function (ev) {
+          ev.preventDefault();
+          clearErrors(form);
+          var f = form.elements;
+          var aadhaar = f.aadhaarNumber.value.replace(/\D/g, '');
+          var ecPhoneDigits = f.ecPhone.value.trim() ? tenDigits(f.ecPhone.value) : null;
+          var problems = [];
+          function need(ok, name, message) { if (!ok) { setFieldError(form, name, message); problems.push(name); } }
+
+          need(f.name.value.trim().length >= 2, 'name', 'Enter your full name.');
+          need(Boolean(f.dateOfBirth.value), 'dateOfBirth', 'Enter your date of birth.');
+          if (f.dateOfBirth.value) need(f.dateOfBirth.value <= isoOf(maxDob), 'dateOfBirth', 'You need to be at least 18 to volunteer.');
+          need(aadhaar.length === 12, 'aadhaarNumber', 'Enter all 12 digits of your Aadhaar number.');
+          if (aadhaar.length === 12) need(aadhaarValid(aadhaar), 'aadhaarNumber', "This doesn't look like a valid Aadhaar number. Check for typos.");
+          need(f.city.value.trim().length >= 2, 'city', 'Enter the city you want to volunteer in.');
+          var ecFilled = f.ecName.value.trim() || f.ecPhone.value.trim() || f.ecRelation.value.trim();
+          if (ecFilled) {
+            need(Boolean(f.ecName.value.trim()), 'ecName', "Add your emergency contact's name.");
+            need(Boolean(ecPhoneDigits), 'ecPhone', 'Enter a valid 10-digit mobile number.');
+          }
+          need(f.consent.checked, 'consent', 'Please confirm to continue.');
+          if (problems.length) {
+            var first = form.querySelector('[name="' + problems[0] + '"]');
+            if (first) first.focus();
+            return;
+          }
+
+          var skills = Array.prototype.filter.call(form.querySelectorAll('input[name=skills]'), function (c) { return c.checked; }).map(function (c) { return c.value; });
+          var body = {
+            name: f.name.value.trim(),
+            dateOfBirth: f.dateOfBirth.value,
+            aadhaarNumber: aadhaar,
+            city: f.city.value.trim(),
+            area: f.area.value.trim() || undefined,
+            gender: f.gender.value || undefined,
+            email: f.email.value.trim() || undefined,
+            skills: skills,
+            languages: f.languages.value.trim() || undefined,
+            emergencyContact: ecFilled ? { name: f.ecName.value.trim(), phone: ecPhoneDigits, relation: f.ecRelation.value.trim() || undefined } : undefined
+          };
+
+          var done = busy(form.querySelector('button[type=submit]'), 'Creating your profile…');
+          api('/auth/register', { method: 'POST', token: reg.token, body: body })
+            .then(function (res) {
+              write(session(), REG_KEY, null);
+              write(localStorage, TOKEN_KEY, res.token);
+              state.welcome = true;
+              loadDashboard();
+            })
+            .catch(function (err) {
+              done();
+              if (err.status === 401) {
+                write(session(), REG_KEY, null);
+                state.flash = 'Your verification expired. Verify your number again to finish signing up.';
+                return viewPhone();
+              }
+              if (err.code === 'already_registered') {
+                write(session(), REG_KEY, null);
+                state.flash = 'This number already has a volunteer account. Sign in with it instead.';
+                return viewPhone();
+              }
+              var field = { 'emergencyContact.name': 'ecName', 'emergencyContact.phone': 'ecPhone' }[err.details.field] || err.details.field;
+              if (field && setFieldError(form, field, err.message)) {
+                var input = form.querySelector('[name="' + field + '"]');
+                if (input) input.focus();
+              } else {
+                formError(form, err.message);
+              }
+            });
+        });
+        form.name.focus();
+      }
+
+      // ---- dashboard -------------------------------------------------------------------
+
+      function loadDashboard() {
+        var t = token();
+        if (!state.me) render('<div class="card spinner">Loading your events…</div>', 'dashboard');
+        return Promise.all([
+          api('/volunteer/me', { token: t }),
+          api('/volunteer/events', { token: t }),
+          api('/volunteer/applications', { token: t }),
+          api('/leaderboard', { token: t }),
+          state.rules ? Promise.resolve({ rules: state.rules }) : api('/ranking/rules')
+        ]).then(function (r) {
+          state.me = r[0].volunteer;
+          state.events = r[1].events;
+          state.applications = r[2].applications;
+          state.board = r[3];
+          state.rules = r[4].rules;
+          viewDashboard();
+        }).catch(function (err) {
+          if (err.code === 'not_configured') return viewClosed();
+          if (err.status === 401 || err.code === 'account_suspended') {
+            signOut(err.code === 'account_suspended' ? err.message : 'Please sign in again.');
+            return;
+          }
+          render('<div class="card"><h2>Something went wrong</h2><p class="muted" style="margin-top:10px">' + esc(err.message) + '</p><button class="btn block" type="button" id="retry">Try again</button></div>', 'dashboard');
+          document.getElementById('retry').addEventListener('click', loadDashboard);
+        });
+      }
+
+      function signOut(message) {
+        write(localStorage, TOKEN_KEY, null);
+        state = { flash: message || null, tab: state.tab };
+        viewPhone();
+        window.scrollTo(0, 0);
+      }
+
+      function kycNotice(me) {
+        var kyc = me.kyc;
+        if (kyc.status === 'verified') {
+          return '<p class="notice ok"><b>Verified volunteer.</b> Your Aadhaar (' + esc(me.aadhaar) + ') is verified, so you can be approved for events.</p>';
+        }
+        if (kyc.status === 'rejected') {
+          return '<div class="notice bad"><b>Your Aadhaar verification didn\'t go through.</b> ' + esc(kyc.note || 'Your details didn\'t match your card.') +
+            ' Correct your details and the team will check again.' +
+            '<div class="actions"><button class="btn sm" type="button" id="fix-kyc">Fix my details</button></div></div>' +
+            '<form class="inline-form" id="f-kyc" hidden novalidate><span class="label">Update details for verification</span>' +
+            '<div class="grid2"><div class="field"><label for="k-name">Full name</label><input class="input" id="k-name" name="name" value="' + esc(me.name) + '"><p class="err" data-err="name"></p></div>' +
+            '<div class="field"><label for="k-dob">Date of birth</label><input class="input" id="k-dob" type="date" name="dateOfBirth" value="' + esc(me.dateOfBirth) + '"><p class="err" data-err="dateOfBirth"></p></div></div>' +
+            '<div class="field"><label for="k-aadhaar">Aadhaar number</label><input class="input" id="k-aadhaar" name="aadhaarNumber" inputmode="numeric" maxlength="14" placeholder="Leave empty to keep ' + esc(me.aadhaar) + '"><p class="err" data-err="aadhaarNumber"></p></div>' +
+            '<p class="err form-error" role="alert"></p><div class="row"><button class="btn sm" type="submit">Send for review</button><button class="btn sm ghost" type="button" id="fix-cancel">Cancel</button></div></form>';
+        }
+        return '<p class="notice warn"><b>Aadhaar verification pending.</b> You can apply to events now. Bring your Aadhaar card (' + esc(me.aadhaar) +
+          ') to your first event. The team verifies it before approving you.</p>';
+      }
+
+      function viewDashboard() {
+        var me = state.me;
+        var s = me.stats;
+        var cityRank = me.standing.city.rank;
+        var tiers = (state.rules && state.rules.tiers) || [];
+        var current = tiers.filter(function (t) { return t.name === s.tier; })[0];
+        var progress = 100;
+        if (s.nextTier && current) {
+          var span = s.points + s.nextTier.pointsNeeded - current.minPoints;
+          progress = Math.round(((s.points - current.minPoints) / span) * 100);
+        }
+        var welcome = state.welcome;
+        state.welcome = false;
+        var counts = { events: state.events.length, applications: state.applications.length };
+
+        render(
+          '<div class="dash">' +
+          '<div class="dash-head"><span class="label">Volunteer dashboard</span>' +
+          '<h1>Hi, ' + esc(me.name.split(' ')[0]) + '</h1>' +
+          '<p class="muted">Showing events in <b style="color:var(--text)">' + esc(me.city) + '</b> · <button class="linkbtn" type="button" id="change-city">Change city</button></p></div>' +
+          '<form class="inline-form" id="f-city" hidden novalidate><label class="field-label" for="new-city">Your city</label>' +
+          '<div class="row"><input class="input" id="new-city" name="city" list="city-options" value="' + esc(me.city) + '" maxlength="60">' +
+          '<button class="btn sm" type="submit">Save</button><button class="btn sm ghost" type="button" id="city-cancel">Cancel</button></div>' +
+          '<p class="err form-error" role="alert"></p></form>' +
+          (welcome ? '<p class="notice ok"><b>You\'re in!</b> Your volunteer profile is ready. Apply to any event below.</p>' : '') +
+          kycNotice(me) +
+          '<div class="stats">' +
+          '<div class="stat"><b>' + s.points + '</b><span>Points</span></div>' +
+          '<div class="stat"><b>' + esc(s.tier) + '</b><span>Tier</span></div>' +
+          '<div class="stat"><b>' + (cityRank ? '#' + cityRank : '—') + '</b><span>' + (cityRank ? 'Rank in ' + esc(me.city) + ' of ' + me.standing.city.rankedVolunteers : 'Rank after your first event') + '</span></div>' +
+          '<div class="stat"><b>' + s.completedEvents + '</b><span>Events completed</span></div>' +
+          '<div class="stat"><b>' + (s.averageRating != null ? s.averageRating.toFixed(1) + '★' : '—') + '</b><span>Average rating</span></div>' +
+          '</div>' +
+          '<div class="tier"><div class="tier-row"><span><b>' + esc(s.tier) + '</b> tier</span><span class="muted">' +
+          (s.nextTier ? s.nextTier.pointsNeeded + ' points to ' + esc(s.nextTier.name) : 'Top tier reached') + '</span></div>' +
+          '<div class="bar" role="progressbar" aria-label="Progress to next tier" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + progress + '"><i style="width:' + Math.max(progress, 2) + '%"></i></div></div>' +
+          '<div class="tabs" role="tablist">' +
+          tab('events', 'Events<span class="wide"> in ' + esc(me.city) + '</span> (' + counts.events + ')') +
+          tab('applications', '<span class="wide">My applications</span><span class="narrow">Applications</span> (' + counts.applications + ')') +
+          tab('leaderboard', 'Leaderboard') +
+          '</div><div class="panel" id="panel" role="tabpanel"></div></div>',
+          'dashboard'
+        );
+        renderPanel();
+
+        app.querySelectorAll('.tab').forEach(function (b) {
+          b.addEventListener('click', function () {
+            state.tab = b.getAttribute('data-tab');
+            write(localStorage, TAB_KEY, state.tab);
+            app.querySelectorAll('.tab').forEach(function (x) { x.setAttribute('aria-selected', String(x === b)); });
+            renderPanel();
+          });
+        });
+
+        var cityForm = document.getElementById('f-city');
+        document.getElementById('change-city').addEventListener('click', function () {
+          cityForm.hidden = false;
+          cityForm.city.focus();
+          cityForm.city.select();
+        });
+        document.getElementById('city-cancel').addEventListener('click', function () { cityForm.hidden = true; });
+        cityForm.addEventListener('submit', function (ev) {
+          ev.preventDefault();
+          var city = cityForm.city.value.trim();
+          if (city.length < 2) return formError(cityForm, 'Enter a city name.');
+          var done = busy(cityForm.querySelector('button[type=submit]'), 'Saving…');
+          api('/volunteer/me', { method: 'PATCH', token: token(), body: { city: city } })
+            .then(function (res) { toast('Now showing events in ' + res.volunteer.city); state.tab = 'events'; return loadDashboard(); })
+            .catch(function (err) { done(); formError(cityForm, err.message); });
+        });
+
+        var fix = document.getElementById('fix-kyc');
+        if (fix) {
+          var kycForm = document.getElementById('f-kyc');
+          fix.addEventListener('click', function () { kycForm.hidden = false; kycForm.name.focus(); });
+          document.getElementById('fix-cancel').addEventListener('click', function () { kycForm.hidden = true; });
+          kycForm.aadhaarNumber.addEventListener('input', function () {
+            var d = kycForm.aadhaarNumber.value.replace(/\D/g, '').slice(0, 12);
+            kycForm.aadhaarNumber.value = d.replace(/(\d{4})(?=\d)/g, '$1 ');
+          });
+          kycForm.addEventListener('submit', function (ev) {
+            ev.preventDefault();
+            clearErrors(kycForm);
+            var body = {};
+            if (kycForm.name.value.trim() !== me.name) body.name = kycForm.name.value.trim();
+            if (kycForm.dateOfBirth.value !== me.dateOfBirth) body.dateOfBirth = kycForm.dateOfBirth.value;
+            var a = kycForm.aadhaarNumber.value.replace(/\D/g, '');
+            if (a) {
+              if (!aadhaarValid(a)) return setFieldError(kycForm, 'aadhaarNumber', "This doesn't look like a valid Aadhaar number.");
+              body.aadhaarNumber = a;
+            }
+            if (!Object.keys(body).length) return formError(kycForm, 'Change at least one detail to send it for review.');
+            var done = busy(kycForm.querySelector('button[type=submit]'), 'Sending…');
+            api('/volunteer/me', { method: 'PATCH', token: token(), body: body })
+              .then(function () { toast('Sent for verification'); return loadDashboard(); })
+              .catch(function (err) {
+                done();
+                if (!setFieldError(kycForm, err.details.field, err.message)) formError(kycForm, err.message);
+              });
+          });
+        }
+      }
+
+      function tab(id, label) {
+        return '<button class="tab" type="button" role="tab" data-tab="' + id + '" aria-selected="' + (state.tab === id) + '">' + label + '</button>';
+      }
+
+      function renderPanel() {
+        var panel = document.getElementById('panel');
+        if (state.tab === 'applications') panel.innerHTML = applicationsHtml();
+        else if (state.tab === 'leaderboard') panel.innerHTML = leaderboardHtml();
+        else panel.innerHTML = eventsHtml();
+        panel.querySelectorAll('[data-apply]').forEach(function (b) { b.addEventListener('click', function () { apply(b); }); });
+        panel.querySelectorAll('[data-withdraw]').forEach(function (b) { b.addEventListener('click', function () { withdraw(b); }); });
+      }
+
+      function dateBox(iso) {
+        var d = localDate(iso);
+        return '<div class="datebox" aria-hidden="true"><span>' + d.toLocaleDateString('en-IN', { month: 'short' }) + '</span><b>' + d.getDate() + '</b><span>' +
+          d.toLocaleDateString('en-IN', { weekday: 'short' }) + '</span></div>';
+      }
+
+      function eventsHtml() {
+        if (!state.events.length) {
+          return '<div class="empty"><b>No upcoming events in ' + esc(state.me.city) + ' yet</b>New events show up here as soon as the team announces them. Check back soon.</div>';
+        }
+        return state.events.map(function (e) {
+          var mine = e.myApplication;
+          var action;
+          if (!mine || mine.status === 'withdrawn') {
+            if (e.slotsLeft > 0) {
+              var roles = e.roles.length
+                ? '<select class="input sm" data-role-for="' + esc(e.id) + '" aria-label="Preferred role for ' + esc(e.title) + '"><option value="">Any role</option>' +
+                  e.roles.map(function (r) { return '<option>' + esc(r) + '</option>'; }).join('') + '</select>'
+                : '';
+              action = roles + '<button class="btn sm" type="button" data-apply="' + esc(e.id) + '">' + (mine ? 'Apply again' : 'Apply') + '</button>';
+            } else {
+              action = '<span class="badge">All spots filled</span>';
+            }
+          } else {
+            var st = STATUS[mine.status] || { text: mine.status, tone: '' };
+            action = '<span class="badge ' + st.tone + '">' + esc(st.text) + '</span>';
+            if (mine.status === 'applied' || mine.status === 'approved') {
+              action += '<button class="linkbtn" type="button" data-withdraw="' + esc(e.id) + '">Withdraw</button>';
+            }
+          }
+          return '<article class="item">' + dateBox(e.date) + '<div>' +
+            '<h3>' + esc(e.title) + '</h3>' +
+            '<p class="meta">' + esc(prettyDate(e.date)) + (timeRange(e) ? ' · ' + esc(timeRange(e)) : '') + '</p>' +
+            '<p class="meta">' + esc(e.venue) + (e.address ? ', ' + esc(e.address) : '') + '</p>' +
+            (e.description ? '<p class="desc">' + esc(e.description) + '</p>' : '') +
+            '<div class="tags">' + e.roles.map(function (r) { return '<span class="tag">' + esc(r) + '</span>'; }).join('') +
+            '<span class="meta" style="margin:0 0 0 4px">' + e.slotsLeft + ' of ' + e.volunteersNeeded + ' spots left</span></div>' +
+            '<div class="actions">' + action + '</div><p class="err" data-event-err="' + esc(e.id) + '"></p>' +
+            '</div></article>';
+        }).join('');
+      }
+
+      function applicationsHtml() {
+        if (!state.applications.length) {
+          return '<div class="empty"><b>No applications yet</b>Apply to an event in ' + esc(state.me.city) + ' and track it here.</div>';
+        }
+        return state.applications.map(function (a) {
+          var st = STATUS[a.status] || { text: a.status, tone: '' };
+          var e = a.event || {};
+          return '<article class="item">' + (e.date ? dateBox(e.date) : '<div></div>') + '<div>' +
+            '<h3>' + esc(e.title || 'Event') + '</h3>' +
+            '<p class="meta">' + (e.date ? esc(prettyDate(e.date)) + ' · ' : '') + esc(e.venue || '') + (e.city ? ', ' + esc(e.city) : '') +
+            (e.status === 'cancelled' ? ' · <b>Event cancelled</b>' : '') + '</p>' +
+            '<div class="actions"><span class="badge ' + st.tone + '">' + esc(st.text) + '</span>' +
+            (a.preferredRole ? '<span class="tag">' + esc(a.preferredRole) + '</span>' : '') + '</div>' +
+            (a.decisionNote ? '<p class="notice">' + esc(a.decisionNote) + '</p>' : '') +
+            (a.review && a.review.rating ? '<p class="desc">' + stars(a.review.rating) + (a.review.comment ? ' “' + esc(a.review.comment) + '”' : '') + '</p>' : '') +
+            '</div></article>';
+        }).join('');
+      }
+
+      function leaderboardHtml() {
+        var board = state.board;
+        var rows = board.leaderboard.map(function (r) {
+          return '<tr class="' + (r.isYou ? 'me' : '') + '"><td>#' + r.rank + '</td><td>' + esc(r.name) + (r.isYou ? ' (you)' : '') + '</td><td>' + esc(r.tier) +
+            '</td><td class="num">' + r.points + '</td><td class="num hide-sm">' + r.completedEvents + '</td><td class="num hide-sm">' +
+            (r.averageRating != null ? r.averageRating.toFixed(1) + '★' : '—') + '</td></tr>';
+        }).join('');
+        var you = board.you && !board.leaderboard.some(function (r) { return r.isYou; })
+          ? '<p class="notice">You\'re <b>#' + board.you.rank + '</b> in ' + esc(board.scope) + ' with ' + board.you.points + ' points.</p>'
+          : '';
+        var rules = state.rules;
+        var rulesHtml = rules
+          ? '<details class="rules"><summary>How points and ranks work</summary><ul>' +
+            '<li>Each completed event: <b>+' + rules.pointsPerCompletedEvent + '</b> points</li>' +
+            '<li>Coordinator rating bonus: ' + [5, 4, 3, 2, 1].map(function (n) {
+              var v = rules.ratingBonusByStars[n];
+              return n + '★ ' + (v > 0 ? '+' : '') + v;
+            }).join(', ') + '</li>' +
+            '<li>No-show: <b>' + rules.noShowPenalty + '</b> points</li>' +
+            '<li>Tiers: ' + rules.tiers.slice().reverse().map(function (t) { return esc(t.name) + ' ' + t.minPoints + '+'; }).join(' · ') + '</li>' +
+            '<li>Ties are broken by average rating, then events completed.</li></ul></details>'
+          : '';
+        if (!board.leaderboard.length) {
+          return '<div class="empty"><b>No one is ranked in ' + esc(board.scope) + ' yet</b>Volunteers appear here after their first reviewed event. It could be you.</div>' + rulesHtml;
+        }
+        return '<div class="lb-wrap"><table class="lb"><caption class="label" style="text-align:left;padding:14px 14px 4px">' + esc(board.scope) + ' leaderboard</caption>' +
+          '<thead><tr><th>Rank</th><th>Volunteer</th><th>Tier</th><th class="num">Points</th><th class="num hide-sm">Events</th><th class="num hide-sm">Rating</th></tr></thead>' +
+          '<tbody>' + rows + '</tbody></table></div>' + you + rulesHtml;
+      }
+
+      function eventError(id, message) {
+        var slot = document.querySelector('[data-event-err="' + id + '"]');
+        if (slot) slot.textContent = message;
+      }
+
+      function apply(button) {
+        var id = button.getAttribute('data-apply');
+        var roleSelect = document.querySelector('[data-role-for="' + id + '"]');
+        var body = roleSelect && roleSelect.value ? { preferredRole: roleSelect.value } : {};
+        busy(button, 'Applying…');
+        api('/volunteer/events/' + encodeURIComponent(id) + '/apply', { method: 'POST', token: token(), body: body })
+          .then(function (res) { toast('Applied to ' + res.application.event.title); return loadDashboard(); })
+          .catch(function (err) { button.disabled = false; button.textContent = 'Apply'; eventError(id, err.message); });
+      }
+
+      function withdraw(button) {
+        var id = button.getAttribute('data-withdraw');
+        if (!window.confirm('Withdraw your application for this event?')) return;
+        busy(button, 'Withdrawing…');
+        api('/volunteer/events/' + encodeURIComponent(id) + '/withdraw', { method: 'POST', token: token() })
+          .then(function () { toast('Application withdrawn'); return loadDashboard(); })
+          .catch(function (err) { button.disabled = false; button.textContent = 'Withdraw'; eventError(id, err.message); });
+      }
+
+      // ---- start -----------------------------------------------------------------------
+
+      document.getElementById('theme').addEventListener('click', function () {
+        var dark = !document.documentElement.classList.contains('dark');
+        document.documentElement.classList.toggle('dark', dark);
+        write(localStorage, 'nb_theme', dark ? 'dark' : 'light');
+      });
+      signOutBtn.addEventListener('click', function () { signOut(null); });
+
+      loadCities();
+      if (token()) {
+        loadDashboard();
+      } else {
+        api('/health')
+          .then(function (h) { return h.status === 'ok'; })
+          .catch(function () { return true; }) // let the form surface any real error
+          .then(function (open) {
+            if (!open) return viewClosed();
+            if (registration()) viewRegister();
+            else viewPhone();
+          });
+      }
+    })();
+  </script>
+</body>
+</html>

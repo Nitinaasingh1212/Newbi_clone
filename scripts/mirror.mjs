@@ -3,6 +3,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join, posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { applyVolunteerBanner } from './volunteer-banner.mjs';
 
 const ORIGIN = 'https://www.newbi.live';
 const OUT = join(dirname(fileURLToPath(import.meta.url)), '..', 'site');
@@ -108,6 +109,8 @@ async function main() {
   });
   console.log(`\nDone: ${seen.size} paths visited, ${failed.length} failed`);
   for (const f of failed) console.log('  fail', f);
+  // The fresh index.html no longer has our volunteer banner; put it back.
+  await applyVolunteerBanner();
 }
 
 main();
