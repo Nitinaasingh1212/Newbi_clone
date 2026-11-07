@@ -35,7 +35,7 @@ This is a **prototype**. It works with no setup, using values hardcoded in the b
 | `/admin` | OSH Admin Dashboard: counts, events with the volunteers interested in each (approve / reject, verify Aadhaar, rate after the event, add events), volunteer records, vendor verification and the feedback inbox |
 | `/about`, `/terms`, `/privacy`, `/credits` | About OSH, the draft legal pages, and photo credits |
 
-All pages share one design system ([`site/osh/osh.css`](site/osh/osh.css)) and one shell script ([`site/osh/app.js`](site/osh/app.js)) for the header (logo, network name, Online status), the phone tab bar, the footer, light/dark mode and the API client. Each page's own script is in [`site/osh/pages/`](site/osh/pages/).
+All pages share one design system, the emerald green OSH UI ([`site/osh/osh.css`](site/osh/osh.css)), and one shell script ([`site/osh/app.js`](site/osh/app.js)) for the header (OSH logo, search, notifications, light/dark mode, sign in), the phone menu and tab bar, the footer and the API client. Each page's own script is in [`site/osh/pages/`](site/osh/pages/).
 
 ## Demo data and the demo account
 

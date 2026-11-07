@@ -78,7 +78,7 @@
       '<label class="check"><input type="checkbox" id="r-terms"><span>I agree to the <a href="/terms" target="_blank" rel="noopener">Terms &amp; Conditions</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a>, and to OSH using my Aadhaar details to verify my identity.</span></label>' +
       '<p class="err" data-err="terms"></p>' +
       '<p class="err" id="reg-error" role="alert" style="margin-top:12px"></p>' +
-      '<button class="btn btn-lg btn-block" type="submit" id="reg-submit" style="margin-top:20px">Submit Volunteer Registration</button>' +
+      '<button class="btn btn-lg" type="submit" id="reg-submit" style="margin-top:20px">Register as Volunteer ' + O.icon('arrowRight', 18) + '</button>' +
       '<p class="form-note">Your profile goes to the OSH team for Aadhaar verification. You can send interest for events in your city straight away.</p>' +
       '</form>';
     wire();

@@ -1,12 +1,12 @@
 // OSH Entertainment: shared site script, loaded on every page before the page's own script.
-// Renders the header (logo, network name, Online status), the bottom tab bar and the footer;
-// handles the theme and sign-in state; and provides the API client and helpers (window.OSH)
-// used by the page scripts in /osh/pages/.
+// Renders the header, mobile drawer, bottom tab bar, search overlay and footer; handles the
+// theme, notifications and sign-in state; and provides the API client and helpers
+// (window.OSH) used by the page scripts in /osh/pages/.
 (function () {
   'use strict';
 
   var API = '/api/v1';
-  var KEYS = { token: 'osh_token', me: 'osh_me', theme: 'osh_theme', options: 'osh_options_v1' };
+  var KEYS = { token: 'osh_token', me: 'osh_me', theme: 'osh_theme', seen: 'osh_seen_updates', options: 'osh_options_v1' };
 
   // ---- storage ------------------------------------------------------------------
   function read(key, area) { try { return (area || localStorage).getItem(key); } catch (e) { return null; } }
@@ -19,7 +19,7 @@
   // Sessions from the earlier volunteer portal keep working.
   if (!read(KEYS.token) && read('nbv_token')) { write(KEYS.token, read('nbv_token')); write('nbv_token', null); }
   // Left over from the ticketing version of the site.
-  write('osh_tickets', null); write('osh_saved', null); write('osh_seen_updates', null);
+  write('osh_tickets', null); write('osh_saved', null);
 
   function esc(value) {
     return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
@@ -32,6 +32,8 @@
     search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
     moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
     sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>',
+    bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+    menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
     x: '<path d="M18 6 6 18M6 6l12 12"/>',
     calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
     calendarCheck: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M9 16l2 2 4-4"/>',
@@ -40,6 +42,7 @@
     share: '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.59 13.51 6.83 3.98M15.41 6.51l-6.82 3.98"/>',
     arrowRight: '<path d="M5 12h14M12 5l7 7-7 7"/>',
     arrowLeft: '<path d="M19 12H5M12 19l-7-7 7-7"/>',
+    filter: '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
     users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
     user: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
     userPlus: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/>',
@@ -49,6 +52,7 @@
     grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/>',
     graduation: '<path d="M22 10 12 5 2 10l10 5 10-5Z"/><path d="M6 12v5c3 3 9 3 12 0v-5M22 10v6"/>',
     info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',
+    handshake: '<path d="m11 17 2 2a1 1 0 1 0 3-3"/><path d="m14 14 2.5 2.5a1 1 0 1 0 3-3l-3.88-3.88a3 3 0 0 0-4.24 0l-.88.88a1 1 0 1 1-3-3l2.81-2.81a5.79 5.79 0 0 1 7.06-.87l.47.28a2 2 0 0 0 1.42.25L21 4"/><path d="m21 3 1 11h-2M3 3 2 14l6.5 6.5a1 1 0 1 0 3-3M3 4h8"/>',
     award: '<circle cx="12" cy="8" r="6"/><path d="M15.48 12.89 17 22l-5-3-5 3 1.52-9.11"/>',
     network: '<rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3M12 12V8"/>',
     trendingUp: '<path d="m22 7-8.5 8.5-5-5L2 17"/><path d="M16 7h6v6"/>',
@@ -94,15 +98,15 @@
     return 'star';
   }
 
-  // Categories from the OSH brief, with the colour, icon and one-line description the site uses.
+  // Categories from the OSH brief, with the icon and one-line description the site uses.
   var CATEGORIES = {
-    'Music & Concerts': { key: 'music', tag: 'Music Concert', blurb: 'Concerts, DJ nights & tours', icon: 'mic', color: 'red' },
-    'Corporate Events': { key: 'corporate', tag: 'Corporate', blurb: 'Conferences & award nights', icon: 'building', color: 'green' },
-    'College Festivals': { key: 'college', tag: 'College Fest', blurb: 'Campus fests & youth events', icon: 'graduation', color: 'gold' },
-    'Private Events': { key: 'private', tag: 'Private Event', blurb: 'Weddings & celebrations', icon: 'sparkles', color: 'violet' },
+    'Music & Concerts': { key: 'music', tag: 'Music Concert', blurb: 'Concerts, DJ nights & tours', icon: 'mic' },
+    'Corporate Events': { key: 'corporate', tag: 'Corporate', blurb: 'Conferences & award nights', icon: 'building' },
+    'College Festivals': { key: 'college', tag: 'College Fest', blurb: 'Campus fests & youth events', icon: 'graduation' },
+    'Private Events': { key: 'private', tag: 'Private Event', blurb: 'Weddings & celebrations', icon: 'sparkles' },
   };
   function categoryMeta(name) {
-    return CATEGORIES[name] || { key: 'other', tag: name || 'Event', blurb: '', icon: 'calendar', color: 'blue' };
+    return CATEGORIES[name] || { key: 'other', tag: name || 'Event', blurb: '', icon: 'calendar' };
   }
 
   // ---- API client -------------------------------------------------------------------
@@ -113,13 +117,11 @@
     if (options.token) headers.Authorization = 'Bearer ' + options.token;
     return fetch(API + path, { method: options.method || 'GET', headers: headers, body: options.body ? JSON.stringify(options.body) : undefined })
       .catch(function () {
-        setOnline(false);
         var e = new Error("Can't reach the server. Check your connection and try again.");
         e.code = 'network';
         throw e;
       })
       .then(function (res) {
-        setOnline(true);
         return res.json().catch(function () { return null; }).then(function (data) {
           if (data && data.success) return data;
           var info = (data && data.error) || {};
@@ -150,7 +152,7 @@
   function localDate(iso) { var p = String(iso).split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); }
   function isoOf(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
   function todayIso() { return isoOf(new Date()); }
-  function prettyDate(iso, opts) { return localDate(iso).toLocaleDateString('en-GB', opts || { day: '2-digit', month: 'short', year: 'numeric' }); }
+  function prettyDate(iso, opts) { return localDate(iso).toLocaleDateString('en-IN', opts || { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }); }
   function prettyTime(t) {
     if (!t) return '';
     var p = t.split(':'); var h = Number(p[0]); var suffix = h >= 12 ? 'PM' : 'AM';
@@ -162,10 +164,10 @@
     var days = Math.round((localDate(iso) - localDate(todayIso())) / 86400000);
     return days <= 0 ? 'Today' : days === 1 ? 'Tomorrow' : 'In ' + days + ' days';
   }
-  // "Lucknow · Phoenix Palassio, Lucknow"; just "Jaipur" when the venue is the city itself.
+  // "Phoenix Palassio, Lucknow"; "Jaipur" when the venue is the city itself; "Chandigarh, Punjab".
   function placeText(e) {
     if (!e.venue || e.venue.toLowerCase() === String(e.city).toLowerCase()) return e.city;
-    return e.city + ' · ' + e.venue;
+    return e.venue.toLowerCase().indexOf(String(e.city).toLowerCase()) === -1 ? e.venue + ', ' + e.city : e.venue;
   }
   function firstSentence(text) {
     var t = String(text || '');
@@ -199,61 +201,52 @@
 
   // ---- event (crew opportunity) card ------------------------------------------------
   // opts.status: badge HTML over the photo; opts.extra: HTML before the footer;
-  // opts.hideFoot: leave out "Open for interest / I'm Interested".
+  // opts.hideFoot: leave out the positions and "I'm Interested".
+  function positionsText(e) {
+    if (e.slotsLeft === 0) return 'Positions filled';
+    if (e.slotsLeft != null && e.slotsLeft < e.volunteersNeeded) return e.slotsLeft + ' of ' + e.volunteersNeeded + ' open';
+    return plural(e.volunteersNeeded, 'position');
+  }
   function eventCard(e, opts) {
     opts = opts || {};
     var c = categoryMeta(e.category);
     var href = '/events/' + encodeURIComponent(e.id);
-    var d = localDate(e.date);
     var full = e.slotsLeft === 0;
-    var positions = plural(e.volunteersNeeded, 'volunteer position') + (e.slotsLeft != null && e.slotsLeft < e.volunteersNeeded && !full ? ' · ' + e.slotsLeft + ' open' : '');
+    var when = prettyDate(e.date, { day: 'numeric', month: 'short', year: 'numeric' }) + (e.startTime ? ' · ' + prettyTime(e.startTime) : '');
     return '<article class="ev-card" data-event="' + esc(e.id) + '">' +
       '<a class="ev-media" href="' + href + '" tabindex="-1" aria-hidden="true">' +
       (e.image ? '<img src="' + esc(e.image) + '" alt="" loading="lazy">' : '') +
-      '<span class="ev-date"><b>' + d.getDate() + '</b><span>' + esc(d.toLocaleDateString('en-GB', { month: 'short' })) + '</span></span></a>' +
+      '<span class="ev-cat">' + esc(c.tag) + '</span></a>' +
       (opts.status || '') +
       '<div class="ev-body">' +
-      '<span class="ev-tag k-' + c.key + '">' + esc(c.tag) + '</span>' +
       '<h3><a href="' + href + '">' + esc(e.title) + '</a></h3>' +
-      '<p class="ev-meta">' + icon('pin', 16, 'i-pin') + '<span>' + esc(placeText(e)) + '</span></p>' +
-      '<p class="ev-meta">' + icon('calendar', 16, 'i-cal') + '<span>' + esc(prettyDate(e.date)) + (e.startTime ? ' · ' + esc(prettyTime(e.startTime)) : '') + '</span></p>' +
-      '<p class="ev-meta">' + icon('users', 16, 'i-crew') + '<span>' + esc(positions) + '</span></p>' +
-      (e.description ? '<p class="ev-desc">' + esc(firstSentence(e.description)) + '</p>' : '') +
+      '<p class="ev-meta">' + icon('calendar', 15) + '<span>' + esc(when) + '</span></p>' +
+      '<p class="ev-meta">' + icon('pin', 15) + '<span>' + esc(placeText(e)) + '</span></p>' +
       (opts.extra || '') +
-      (opts.hideFoot ? '' : '<div class="ev-foot">' +
-        (full ? '<span class="open-dot full">Positions filled</span><a class="ev-cta" href="' + href + '">View event</a>'
-              : '<span class="open-dot">Open for interest</span><a class="ev-cta" href="' + href + '#interest">I’m Interested</a>') + '</div>') +
+      (opts.hideFoot ? '' : '<div class="ev-foot"><span class="ev-price' + (full ? ' full' : '') + '">' + icon('users', 16) + esc(positionsText(e)) + '</span>' +
+        '<a class="ev-cta" href="' + href + (full ? '' : '#interest') + '">' + (full ? 'View' : 'I’m Interested') + ' ' + icon('arrowRight', 14) + '</a></div>') +
       '</div></article>';
   }
 
   // ---- theme ----------------------------------------------------------------------
   function isDark() { return document.documentElement.classList.contains('dark'); }
-  function paintThemeButtons() {
+  function paintTheme() {
     document.querySelectorAll('[data-theme-toggle]').forEach(function (b) {
-      var label = isDark() ? 'Light mode' : 'Dark mode';
-      b.setAttribute('aria-label', 'Switch to ' + label.toLowerCase());
-      b.innerHTML = b.classList.contains('icon-btn') ? icon(isDark() ? 'sun' : 'moon') : label;
+      b.innerHTML = icon(isDark() ? 'sun' : 'moon', 20) + (b.classList.contains('icon-btn') ? '' : ' ' + (isDark() ? 'Light mode' : 'Dark mode'));
     });
+    var img = document.querySelector('.ftr img');
+    if (img) img.src = isDark() ? '/osh/img/osh-logo-dark.png' : '/osh/img/osh-logo.png';
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', isDark() ? '#0A1F1A' : '#0D8F64');
   }
   function setTheme(dark) {
     document.documentElement.classList.toggle('dark', dark);
     write(KEYS.theme, dark ? 'dark' : 'light');
-    var meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', dark ? '#0B1220' : '#0277C8');
-    paintThemeButtons();
+    paintTheme();
   }
 
-  // ---- online status ----------------------------------------------------------------
-  function setOnline(on) {
-    document.querySelectorAll('[data-online]').forEach(function (el) {
-      el.classList.toggle('off', !on);
-      el.textContent = on ? 'Online' : 'Offline';
-      el.title = on ? 'Connected to the OSH network' : "You're offline";
-    });
-  }
-
-  // ---- header, tab bar, footer ------------------------------------------------------
-  var NAV = [['/', 'Home'], ['/events', 'Events'], ['/volunteer', 'Volunteer'], ['/vendors', 'Vendors'], ['/feedback', 'Feedback']];
+  // ---- header, drawer, tab bar, footer ----------------------------------------------
+  var NAV = [['/', 'Home', 'home'], ['/events', 'Events', 'calendar'], ['/volunteer', 'Volunteer', 'users'], ['/vendors', 'Vendors', 'store'], ['/about', 'About', 'info']];
   var path = location.pathname.replace(/\/+$/, '') || '/';
   function section() {
     if (path === '/') return '/';
@@ -266,7 +259,6 @@
   }
   var current = section();
   function profileHref() { return auth.token() ? '/profile' : '/volunteer/login?next=%2Fprofile'; }
-  var LOGO = '<span class="brand-tile"><img src="/osh/img/osh-logo.png" alt="" width="44" height="25"></span>';
 
   function renderHeader() {
     var slot = document.getElementById('site-header');
@@ -276,22 +268,32 @@
     slot.outerHTML =
       '<a class="sr-only" href="#main">Skip to content</a>' +
       '<header class="hdr"><div class="container hdr-in">' +
-      '<a class="brand" href="/" aria-label="OSH Entertainment, Pan India Event Network: home">' + LOGO +
-      '<span class="brand-text"><b>OSH ENTERTAINMENT</b><small>PAN INDIA EVENT NETWORK</small></span></a>' +
+      '<a class="brand" href="/" aria-label="OSH Entertainment home"><img class="logo-light" src="/osh/img/osh-logo.png" alt="OSH Entertainment" width="80" height="46"><img class="logo-dark" src="/osh/img/osh-logo-dark.png" alt="OSH Entertainment" width="80" height="46"></a>' +
       '<nav class="hdr-nav" aria-label="Main">' + NAV.map(function (n) {
         return '<a href="' + n[0] + '"' + (current === n[0] ? ' class="active" aria-current="page"' : '') + '>' + n[1] + '</a>';
       }).join('') + '</nav>' +
       '<div class="hdr-actions">' +
-      '<span class="online" data-online role="status">Online</span>' +
-      '<button class="icon-btn hdr-desktop" type="button" data-theme-toggle></button>' +
+      '<button class="icon-btn" type="button" data-open-search aria-label="Search events">' + icon('search') + '</button>' +
+      '<button class="icon-btn theme-btn" type="button" data-theme-toggle aria-label="Switch light or dark mode"></button>' +
+      '<div class="notif"><button class="icon-btn" type="button" id="notif-btn" aria-label="Notifications" aria-expanded="false" aria-controls="notif-panel">' + icon('bell') + '<span class="dot" hidden></span></button>' +
+      '<div class="card notif-panel" id="notif-panel" hidden></div></div>' +
       (signedIn
-        ? '<a class="avatar hdr-desktop" href="/profile" title="' + esc(me ? me.name : 'My profile') + '" aria-label="My profile">' + esc(me && me.name ? me.name.charAt(0).toUpperCase() : '•') + '</a>'
-        : '<a class="btn btn-sm hdr-desktop" href="/volunteer/login">Sign In</a>') +
+        ? '<a class="avatar" href="/profile" title="' + esc(me ? me.name : 'My profile') + '" aria-label="My profile">' + esc(me && me.name ? me.name.charAt(0).toUpperCase() : '•') + '</a>'
+        : '<a class="btn btn-sm hdr-signin" href="/volunteer/login">Sign In</a>') +
+      '<button class="icon-btn hdr-menu" type="button" id="menu-btn" aria-label="Open menu" aria-expanded="false" aria-controls="drawer">' + icon('menu') + '</button>' +
+      '</div></div>' +
+      '<div class="drawer" id="drawer" hidden><nav aria-label="Menu">' + NAV.concat([['/feedback', 'Feedback', 'message']]).map(function (n) {
+        return '<a class="nav-link' + (current === n[0] ? ' active' : '') + '" href="' + n[0] + '">' + icon(n[2], 22) + n[1] + '</a>';
+      }).join('') +
+      '<a class="nav-link' + (current === '/profile' ? ' active' : '') + '" href="' + profileHref() + '">' + icon('user', 22) + 'My profile</a></nav>' +
+      '<div class="drawer-actions">' +
+      (signedIn ? '<a class="btn btn-block" href="/profile">Go to my profile</a>' : '<a class="btn btn-block" href="/volunteer/login">Sign In</a><a class="btn btn-outline btn-block" href="/volunteer">Join as Volunteer</a>') +
+      '<button class="btn btn-ghost btn-block" type="button" data-theme-toggle></button>' +
       '</div></div></header>';
   }
 
   function renderTabbar() {
-    var tabs = [['/', 'Home', 'home'], ['/events', 'Events', 'calendar'], ['/volunteer', 'Join', 'userPlus'], ['/vendors', 'Vendors', 'store'], [profileHref(), auth.token() ? 'Profile' : 'Sign in', 'user', '/profile']];
+    var tabs = [['/', 'Home', 'home'], ['/events', 'Events', 'calendar'], ['/volunteer', 'Volunteer', 'users'], [profileHref(), 'Profile', 'user', '/profile']];
     var nav = document.createElement('nav');
     nav.className = 'tabbar';
     nav.setAttribute('aria-label', 'Quick links');
@@ -307,28 +309,130 @@
     if (!slot) return;
     slot.outerHTML =
       '<footer class="ftr"><div class="container ftr-grid">' +
-      '<div><a class="ftr-brand" href="/" style="text-decoration:none" aria-label="OSH Entertainment home">' + LOGO +
-      '<span><b>OSH ENTERTAINMENT</b><span>One Nation. One Crew. Unlimited Events.</span></span></a>' +
-      '<p>Pan India Event Network: volunteers, crew members and trusted event vendors for concerts, festivals, corporate and private events.</p></div>' +
+      '<div><a href="/" aria-label="OSH Entertainment home"><img src="/osh/img/osh-logo.png" alt="OSH Entertainment"></a>' +
+      '<p><b>One Nation. One Crew. Unlimited Events.</b><br>OSH Entertainment is a Pan India event network of volunteers, crew members and trusted vendors.</p></div>' +
       '<div><h4>Explore</h4><ul><li><a href="/events">Upcoming events</a></li><li><a href="/#network">Events by city</a></li><li><a href="/#categories">Event categories</a></li><li><a href="/about">About OSH</a></li></ul></div>' +
-      '<div><h4>Join the crew</h4><ul><li><a href="/volunteer">Volunteer registration</a></li><li><a href="/vendors">Vendor registration</a></li><li><a href="' + profileHref() + '">' + (auth.token() ? 'My profile' : 'Volunteer sign in') + '</a></li><li><a href="/feedback">Feedback &amp; support</a></li></ul></div>' +
-      '<div><h4>OSH</h4><ul><li><a href="/admin">Admin dashboard</a></li><li><a href="/terms">Terms &amp; Conditions</a></li><li><a href="/privacy">Privacy Policy</a></li><li><a href="/credits">Photo credits</a></li><li><button type="button" data-theme-toggle></button></li></ul></div>' +
+      '<div><h4>Join the crew</h4><ul><li><a href="/volunteer">Join as volunteer</a></li><li><a href="/vendors">Register as vendor</a></li><li><a href="' + profileHref() + '">' + (auth.token() ? 'My profile' : 'Volunteer sign in') + '</a></li><li><a href="/feedback">Feedback &amp; support</a></li></ul></div>' +
+      '<div><h4>OSH</h4><ul><li><a href="/admin">Admin dashboard</a></li><li><a href="/terms">Terms &amp; Conditions</a></li><li><a href="/privacy">Privacy Policy</a></li><li><a href="/credits">Photo credits</a></li></ul></div>' +
       '</div><div class="container ftr-bottom"><span>© ' + new Date().getFullYear() + ' OSH Entertainment. All rights reserved.</span><span>Pan India Event Network</span></div></footer>';
+  }
+
+  function renderSearch() {
+    var wrap = document.createElement('div');
+    wrap.className = 'search-overlay';
+    wrap.hidden = true;
+    wrap.setAttribute('role', 'dialog');
+    wrap.setAttribute('aria-modal', 'true');
+    wrap.setAttribute('aria-label', 'Search events');
+    wrap.innerHTML =
+      '<div class="card search-box"><form action="/events" method="get" role="search">' + icon('search', 22) +
+      '<label class="sr-only" for="site-search">Search events</label>' +
+      '<input class="input" id="site-search" name="q" placeholder="Search events, roles or cities…" autocomplete="off">' +
+      '<button class="x" type="button" data-close-search aria-label="Close search">' + icon('x') + '</button></form>' +
+      '<div class="search-suggest"><p>Popular searches</p><div class="chips" style="flex-wrap:wrap">' +
+      Object.keys(CATEGORIES).map(function (c) { return '<a class="chip" href="/events?category=' + encodeURIComponent(c) + '">' + esc(c) + '</a>'; }).join('') +
+      ['Lucknow', 'Delhi', 'Mumbai'].map(function (c) { return '<a class="chip" href="/events?city=' + c + '">' + icon('pin', 14) + c + '</a>'; }).join('') +
+      '</div></div></div>';
+    document.body.appendChild(wrap);
+    function open() { wrap.hidden = false; setTimeout(function () { wrap.querySelector('input').focus(); }, 0); }
+    function close() { wrap.hidden = true; }
+    document.addEventListener('click', function (ev) {
+      if (ev.target.closest('[data-open-search]')) open();
+      else if (ev.target.closest('[data-close-search]') || ev.target === wrap) close();
+    });
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape' && !wrap.hidden) close();
+      var typing = /input|textarea|select/i.test((document.activeElement || {}).tagName || '');
+      if (!typing && (ev.key === '/' || ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'k'))) { ev.preventDefault(); open(); }
+    });
+  }
+
+  // ---- notifications ----------------------------------------------------------------
+  var STATUS_TEXT = {
+    applied: ['clock', 'Interest sent', 'Waiting for the OSH team to pick the crew for'],
+    approved: ['checkCircle', "You're on the crew", 'Confirmed to work'],
+    rejected: ['info', 'Not selected this time', "You weren't picked for"],
+    completed: ['star', 'Shift completed', 'You were rated for'],
+    no_show: ['info', 'Marked as no-show', 'You were marked absent at'],
+  };
+  function updatesFrom(applications) {
+    return applications.filter(function (a) { return a.status !== 'withdrawn' && STATUS_TEXT[a.status] && a.event; }).slice(0, 6).map(function (a) {
+      var s = STATUS_TEXT[a.status];
+      var extra = a.status === 'completed' && a.review && a.review.rating ? ' ' + '★'.repeat(a.review.rating) : '';
+      return { key: a.id + ':' + a.status, icon: s[0], title: s[1], text: s[2] + ' ' + a.event.title + extra };
+    });
+  }
+  function initNotifications() {
+    var btn = document.getElementById('notif-btn');
+    var panel = document.getElementById('notif-panel');
+    if (!btn) return;
+    var dot = btn.querySelector('.dot');
+    var updates = null;
+    function seen() { return readJson(KEYS.seen, []); }
+    function load() {
+      if (!auth.token()) return Promise.resolve([]);
+      return api('/volunteer/applications', { token: auth.token() })
+        .then(function (res) { updates = updatesFrom(res.applications); return updates; })
+        .catch(function (err) { if (err.status === 401) auth.signOut(); updates = []; return updates; });
+    }
+    function paint() {
+      if (!auth.token()) {
+        panel.innerHTML = '<h3>Notifications</h3><p class="notif-empty">Sign in to see updates on the events you\'re interested in.</p>' +
+          '<div style="padding:4px 12px 12px"><a class="btn btn-sm btn-block" href="/volunteer/login">Sign In</a></div>';
+        return;
+      }
+      if (!updates) { panel.innerHTML = '<h3>Notifications</h3><p class="notif-empty">Loading…</p>'; return; }
+      panel.innerHTML = '<h3>Notifications</h3>' + (updates.length
+        ? updates.map(function (u) {
+            return '<a class="notif-item" href="/profile"><span class="ico">' + icon(u.icon, 18) + '</span><span><b>' + esc(u.title) + '</b><span>' + esc(u.text) + '</span></span></a>';
+          }).join('')
+        : '<p class="notif-empty">No updates yet. Tap “I’m Interested” on an event and you\'ll see its status here.</p>');
+    }
+    btn.addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      var open = panel.hidden;
+      panel.hidden = !open;
+      btn.setAttribute('aria-expanded', String(open));
+      if (open) {
+        paint();
+        (updates ? Promise.resolve(updates) : load()).then(function () {
+          paint();
+          write(KEYS.seen, JSON.stringify((updates || []).map(function (u) { return u.key; })));
+          dot.hidden = true;
+        });
+      }
+    });
+    document.addEventListener('click', function (ev) {
+      if (!panel.hidden && !ev.target.closest('.notif')) { panel.hidden = true; btn.setAttribute('aria-expanded', 'false'); }
+    });
+    // Show the dot when something changed since the panel was last opened.
+    if (auth.token()) setTimeout(function () {
+      load().then(function (list) {
+        var s = seen();
+        dot.hidden = !list.some(function (u) { return s.indexOf(u.key) === -1; });
+      });
+    }, 400);
   }
 
   function initChrome() {
     renderHeader();
     renderFooter();
     renderTabbar();
-    paintThemeButtons();
-    setOnline(navigator.onLine !== false);
-    window.addEventListener('online', function () { setOnline(true); });
-    window.addEventListener('offline', function () { setOnline(false); });
+    renderSearch();
+    initNotifications();
+    paintTheme();
     document.addEventListener('click', function (ev) {
       if (ev.target.closest('[data-theme-toggle]')) setTheme(!isDark());
     });
-    var meta = document.querySelector('meta[name="theme-color"]');
-    if (meta && isDark()) meta.setAttribute('content', '#0B1220');
+    var menuBtn = document.getElementById('menu-btn');
+    var drawer = document.getElementById('drawer');
+    if (menuBtn) menuBtn.addEventListener('click', function () {
+      var open = drawer.hidden;
+      drawer.hidden = !open;
+      menuBtn.setAttribute('aria-expanded', String(open));
+      menuBtn.innerHTML = icon(open ? 'x' : 'menu');
+      document.body.style.overflow = open ? 'hidden' : '';
+    });
   }
 
   function qs(name) { return new URLSearchParams(location.search).get(name); }
@@ -354,9 +458,9 @@
 
   window.OSH = {
     api: api, options: options, esc: esc, icon: icon, highlightIcon: highlightIcon, categoryMeta: categoryMeta, CATEGORIES: CATEGORIES,
-    toast: toast, auth: auth, eventCard: eventCard, localDate: localDate, isoOf: isoOf, todayIso: todayIso, prettyDate: prettyDate,
-    prettyTime: prettyTime, timeRange: timeRange, whenText: whenText, placeText: placeText, firstSentence: firstSentence, plural: plural,
-    qs: qs, pathId: pathId, read: read, write: write, readJson: readJson, busy: busy, tenDigits: tenDigits, prettyPhone: prettyPhone,
+    toast: toast, auth: auth, eventCard: eventCard, positionsText: positionsText, localDate: localDate, isoOf: isoOf, todayIso: todayIso,
+    prettyDate: prettyDate, prettyTime: prettyTime, timeRange: timeRange, whenText: whenText, placeText: placeText, firstSentence: firstSentence,
+    plural: plural, qs: qs, pathId: pathId, read: read, write: write, readJson: readJson, busy: busy, tenDigits: tenDigits, prettyPhone: prettyPhone,
     starText: starText, selectOptions: selectOptions,
   };
 

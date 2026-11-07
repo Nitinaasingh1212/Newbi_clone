@@ -128,15 +128,16 @@
       '<nav class="crumbs" aria-label="Breadcrumb"><a href="/events">' + O.icon('arrowLeft', 16) + 'Events</a><span aria-hidden="true">/</span><span>' + O.esc(e.title) + '</span></nav>' +
       '<div class="detail"><article>' +
       '<div class="detail-media">' + (e.image ? '<img src="' + O.esc(e.image) + '" alt="">' : '') +
-      '<button class="share" type="button" id="share-btn" aria-label="Share this event">' + O.icon('share', 18) + '</button></div>' +
+      '<span class="ev-cat">' + O.esc(c.tag) + '</span>' +
+      '<div class="actions"><button class="ev-heart" type="button" id="share-btn" aria-label="Share this event">' + O.icon('share', 18) + '</button></div></div>' +
       (e.imageCredit ? '<p class="hint" style="margin-top:8px">' + (e.imageCreditUrl ? '<a class="hint" href="' + O.esc(e.imageCreditUrl) + '" target="_blank" rel="noopener">' + O.esc(e.imageCredit) + '</a>' : O.esc(e.imageCredit)) + '</p>' : '') +
-      '<span class="ev-tag k-' + c.key + '">' + O.esc(c.tag) + '</span>' +
       '<h1>' + O.esc(e.title) + '</h1>' +
       '<div class="detail-meta">' +
-      '<p class="ev-meta">' + O.icon('pin', 18, 'i-pin') + O.esc(O.placeText(e)) + '</p>' +
-      '<p class="ev-meta">' + O.icon('calendar', 18, 'i-cal') + O.esc(O.prettyDate(e.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })) + '</p>' +
-      (e.startTime ? '<p class="ev-meta">' + O.icon('clock', 18, 'i-cal') + O.esc(O.timeRange(e)) + '</p>' : '') +
-      '<p class="ev-meta">' + O.icon('users', 18, 'i-crew') + O.esc(O.plural(e.volunteersNeeded, 'volunteer position')) + '</p></div>' +
+      '<span>' + O.icon('calendar', 18) + O.esc(O.prettyDate(e.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })) + '</span>' +
+      (e.startTime ? '<span>' + O.icon('clock', 18) + O.esc(O.timeRange(e)) + '</span>' : '') +
+      '<span>' + O.icon('pin', 18) + O.esc(O.placeText(e)) + '</span>' +
+      '<span>' + O.icon('users', 18) + O.esc(O.plural(e.volunteersNeeded, 'volunteer position')) + '</span></div>' +
+      (e.tags && e.tags.length ? '<div class="tags">' + e.tags.map(function (t) { return '<span class="tag">' + O.esc(t) + '</span>'; }).join('') + '</div>' : '') +
       (e.demo ? '<p class="notice" style="margin-top:16px">Demo event: details and counts are illustrative. Live listings will be managed by the OSH Admin team.</p>' : '') +
       '<h2>About the event</h2><p class="about">' + O.esc(e.description || 'More details coming soon.') + '</p>' +
       (e.roles.length ? '<h2>Volunteer roles</h2><div class="role-list">' + e.roles.map(function (r) { return '<span class="tag">' + O.esc(r) + '</span>'; }).join('') + '</div>' : '') +
