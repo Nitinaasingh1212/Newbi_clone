@@ -1,114 +1,98 @@
-# newbi.live clone
+# OSH Entertainment: Pan India Event Network
 
-A mirror of the newbi.live landing site, plus a **volunteer portal**. Event volunteers sign up with their phone and Aadhaar, see events in their city, apply, and climb a city leaderboard as the coordination team rates them.
+**One Nation. One Crew. Unlimited Events.** The site for OSH Entertainment's event crew network. Volunteers register with their phone (OTP) and Aadhaar, see crew opportunities at events in their city, and tell the team "I'm Interested". The OSH team picks the crew, rates everyone after the event, and those ratings build a ranking: New Joiner → Trained → Experienced → 5-Star Elite. Vendors can register too, and volunteers can send feedback straight to management.
+
+OSH is not a ticketing platform: there is no ticket booking anywhere on the site.
 
 ## Links
 
 | What | URL |
 |---|---|
-| Landing page (with the "Volunteer with us" bar) | https://newbi-clone.vercel.app |
-| **Volunteer registration / portal** | **https://newbi-clone.vercel.app/volunteer** |
-| **Volunteer sign-in (with the demo account)** | **https://newbi-clone.vercel.app/volunteer/login** |
-| Volunteer API (lists every endpoint) | https://newbi-clone.vercel.app/api/v1 |
+| Home | https://newbi-clone.vercel.app |
+| Upcoming events (crew opportunities) | https://newbi-clone.vercel.app/events |
+| **Volunteer registration** | **https://newbi-clone.vercel.app/volunteer** |
+| Volunteer sign-in (with the demo account) | https://newbi-clone.vercel.app/volunteer/login |
+| Vendor registration | https://newbi-clone.vercel.app/vendors |
+| Volunteer feedback | https://newbi-clone.vercel.app/feedback |
+| OSH Admin Dashboard | https://newbi-clone.vercel.app/admin |
+| API (lists every endpoint) | https://newbi-clone.vercel.app/api/v1 |
 | API setup check | https://newbi-clone.vercel.app/api/v1/health |
 
 This is a **prototype**. It works with no setup, using values hardcoded in the backend. See [Prototype mode](#prototype-mode) for what that means and how to move off it.
 
-## Demo account
+## Pages
 
-To see a filled-in volunteer dashboard without signing up, open the [sign-in page](https://newbi-clone.vercel.app/volunteer/login). Either click **Sign in as the demo volunteer**, or type the credentials:
+| Page | What it does |
+|---|---|
+| `/` | India's Event Crew Network: the "Be Part of OSH!" banner (Volunteer Join / Vendor Join), network numbers, Star Volunteers (top-ranked, from the API), the city network grid, event categories, upcoming events and the network snapshot |
+| `/events` | Every upcoming crew opportunity, filtered by city, category and search. Filters live in the URL (`/events?city=Lucknow`). |
+| `/events/<id>` | Event details, volunteer roles, open positions, and the **I'm Interested** panel. Volunteers can send interest only for events in their own city; everyone else is guided to register or sign in. |
+| `/volunteer` | Volunteer registration: name, mobile (OTP), email, preferred city, skill / department, experience, availability, date of birth and Aadhaar, next to the Elite Crew ladder. `?event=<id>` returns the new volunteer to that event. |
+| `/volunteer/login` | Sign in with phone + OTP, including the demo account |
+| `/profile` | The volunteer dashboard: next shift, points, tier, city rank, events in their city, their interest responses and ratings, the leaderboard, and editing city, skill, experience and availability |
+| `/vendors` | Vendor registration (company, contact, mobile, city, category, optional GST, services). Vendors start as pending until OSH verifies them. |
+| `/feedback` | Confidential volunteer feedback; the name is optional |
+| `/admin` | OSH Admin Dashboard: counts, events with the volunteers interested in each (approve / reject, verify Aadhaar, rate after the event, add events), volunteer records, vendor verification and the feedback inbox |
+| `/about`, `/terms`, `/privacy`, `/credits` | About OSH, the draft legal pages, and photo credits |
+
+All pages share one design system ([`site/osh/osh.css`](site/osh/osh.css)) and one shell script ([`site/osh/app.js`](site/osh/app.js)) for the header (logo, network name, Online status), the phone tab bar, the footer, light/dark mode and the API client. Each page's own script is in [`site/osh/pages/`](site/osh/pages/).
+
+## Demo data and the demo account
+
+The demo events are the 12 crew opportunities from the OSH brief (DJ Night in Lucknow, Corporate Annual Awards in Delhi, College Fest 2026 in Mumbai, and so on) across Lucknow, Delhi, Mumbai, Gurugram, Punjab, Chennai, Jaipur, Bengaluru and Haryana. Dates are relative to today, so the demo never goes stale. Demo events say "Demo event: details and counts are illustrative" on the site.
+
+To see a filled-in volunteer dashboard, open the [sign-in page](https://newbi-clone.vercel.app/volunteer/login) and click **Sign in as the demo volunteer**, or type:
 
 | Phone | OTP |
 |---|---|
 | `99999 99999` | `123456` |
 
-You're signed in as **Riya Kapoor**, a verified volunteer in Delhi. Her dashboard has:
+You're signed in as **Riya Kapoor**, a verified volunteer in Delhi: 55 points, **Trained** tier, #2 of 5 in Delhi, approved for the Corporate Annual Awards, with three rated past events.
 
-- **Stats:** 55 points, Silver tier, #2 of 5 in Delhi, three past events rated 5★, 4★ and 5★
-- **Upcoming events:** approved for Diwali Night Market, and Campus Fest Pro Night still open
-- **Leaderboard:** four other demo volunteers
+The demo data is rewritten each day. On the hosted site the demo account is **view-only** (sending interest and editing the profile are switched off), because Vercel's copies of the API don't share storage. Locally (`npm start`) it can do everything. `DEMO_MODE=false` turns the demo off. It is all defined in [`backend/volunteers/demo-data.js`](backend/volunteers/demo-data.js).
 
-The demo data is rewritten each day with fresh dates. On the hosted site the demo is **view-only**: applying and changing city are switched off, because Vercel's copies of the API don't share storage. Locally (`npm start`), the demo account can do everything. `DEMO_MODE=false` turns the demo off. The demo is defined in [`backend/volunteers/demo-data.js`](backend/volunteers/demo-data.js).
-
-## What's in this repo
-
-| Path | What it is |
-|---|---|
-| `site/` | The newbi.live landing pages and assets, mirrored as served (`/`, `/work`, `/creator`, `/contact`, `/terms`, `/privacy`, `/concertzone`) |
-| `site/volunteer/` | The volunteer portal: one self-contained page, served at `/volunteer` |
-| `backend/volunteers/` | The volunteer API behind `/api/v1`. It has no dependencies. |
-| `api/` | Vercel functions: `forms.js` (mirrored site forms) and `v1.js` (volunteer API) |
-| `server.mjs` | Local server for all of the above |
-| `scripts/` | `mirror.mjs` re-downloads the site. `volunteer-banner.*` adds the volunteer bar to the landing page. |
-| `docs/volunteer-api.md` | Full API reference: every endpoint, request/response examples, ranking rules, setup |
-| `test/` | End-to-end API tests |
-| `newbi-clone/` | A separate React + Express + MongoDB rebuild of the platform. See [its README](newbi-clone/README.md). |
+The numbers in the home page's tiles (1,250+ volunteers, 28 cities, 85+ vendors, 120+ events) come from the OSH design and are written into `site/index.html` and `site/about/index.html`. Replace them with real figures before launch. The network snapshot and the admin counts are live.
 
 ## Run locally
 
 ```
 npm install        # once: installs the SQLite driver (better-sqlite3)
 npm start          # http://localhost:3000  (set PORT to change)
-npm test           # volunteer API tests
+npm test           # API tests
 ```
 
-Open http://localhost:3000/volunteer to try the portal. Locally nothing needs configuring:
+Locally nothing needs configuring:
 
 - **OTPs:** shown on screen instead of sent by SMS.
-- **Data:** stored in a **SQLite** database at `data/newbi.sqlite`. It survives restarts, and you can open it in any SQLite viewer, such as DB Browser for SQLite or the `sqlite3` CLI.
-- **Admin key:** `newbi-admin-2026`.
-- **Demo data:** events in major cities, plus the [demo account](#demo-account) at http://localhost:3000/volunteer/login.
+- **Data:** stored in **SQLite** at `data/newbi.sqlite`. It survives restarts, and you can open it in any SQLite viewer (DB Browser for SQLite, the `sqlite3` CLI).
+- **Admin key:** `newbi-admin-2026` (sign in at http://localhost:3000/admin).
 
 ### What's in the SQLite database
 
 | Table | Holds |
 |---|---|
-| `volunteers` | One row per volunteer, with `name`, `phone`, `city`, `kyc_status`, `status` and `created_at` columns. `doc` holds the full record. |
-| `events` | `title`, `city`, `date`, `status`, `volunteers_needed` and `created_by` columns, plus `doc` |
-| `applications` | `event_id`, `volunteer_id`, `status`, `preferred_role`, `rating` and `applied_at` columns, plus `doc` |
-| `kv` | Lookups: phone → volunteer, Aadhaar hash → volunteer, (event, volunteer) → application |
+| `volunteers` | `name`, `phone`, `city`, `kyc_status`, `status`, `created_at`, plus `doc` (the full record) |
+| `events` | `title`, `city`, `date`, `status`, `volunteers_needed`, `created_by`, plus `doc` |
+| `applications` | Interest responses: `event_id`, `volunteer_id`, `status`, `preferred_role`, `rating`, `applied_at`, plus `doc` |
+| `vendors` | `company_name`, `contact_person`, `phone`, `city`, `category`, `gstin`, `status`, `created_at`, plus `doc` |
+| `feedback` | `category`, `name`, `status`, `created_at`, plus `doc` |
+| `kv` | Lookups: phone → volunteer, Aadhaar hash → volunteer, (event, volunteer) → application, vendor phone → vendor |
 | `temp` | OTP codes and rate-limit counters, each with an expiry time |
 
 To start from scratch, stop the server and delete the `data/` folder.
 
-## Volunteer portal
+## What's in this repo
 
-New volunteers start at `/volunteer`. Registered volunteers sign in at `/volunteer/login`, which also has the demo account. Both are the same page, `site/volunteer/index.html`. A volunteer can:
-
-1. **Verify their phone.** They enter their mobile number and type in the 6-digit OTP. A returning volunteer goes straight to their dashboard.
-2. **Register** (new volunteers):
-   - name, date of birth (18+), Aadhaar number, city
-   - optional: area, skills, languages, email, emergency contact
-   - a consent tick
-
-   The Aadhaar checksum is checked as they type. Only the last 4 digits are ever stored.
-3. **Use their dashboard:**
-   - **Next shift:** the soonest event they're approved for, with a countdown and the coordinator's note. Clicking it jumps to the event.
-   - **Stats:** points, tier, city rank, events completed and average rating. Each card is clickable:
-     - Points and Tier open a breakdown of where every point came from.
-     - Rank opens the leaderboard and highlights their row.
-     - Events completed and Average rating open their history.
-   - **Tier ladder:** Bronze → Silver → Gold → Platinum, with their position marked.
-   - **Events in their city:** photo cards like the home page, showing date, status, spots left and a photo credit. They can apply with a preferred role, or withdraw.
-   - **Their applications:** each with a thumbnail, the coordinator's decision note and star rating.
-   - **Their city leaderboard.**
-   - **Change city.** This changes which events they see.
-   - **Fix rejected details.** If the Aadhaar check is rejected, they can correct their name, date of birth or Aadhaar number and resubmit.
-
-Every signed-out view has a **Sign in / Sign up** button in the header and a **New volunteer | Sign in** switch at the top of the card. The page follows the site's light/dark setting (`nb_theme`) and works on mobile.
-
-Event photos: admins set `image` on an event (an `https://` URL or a path on this site). The demo events use freely licensed photos from Wikimedia Commons in `site/volunteer/img/events/`, credited on each photo and in [`CREDITS.md`](site/volunteer/img/events/CREDITS.md) there. Events without a photo show a plain placeholder.
-
-There is no admin screen yet. Coordinators manage events, verify Aadhaar, approve applicants and rate volunteers through the admin endpoints in [docs/volunteer-api.md](docs/volunteer-api.md#admin--coordination-team).
-
-### The link on the landing page
-
-The landing page has a "Now recruiting volunteers… Register →" bar at the top. A "Volunteer with us" button also appears bottom-right once you scroll. Both link to `/volunteer`.
-
-They sit outside the React app (`#landing-root`), so hydration never touches them.
-
-- **To change the text or style,** edit `scripts/volunteer-banner.html` and run `node scripts/volunteer-banner.mjs`. It replaces the copy already in `site/index.html`.
-- **On a re-mirror,** `npm run mirror` puts the banner back automatically after downloading a fresh `index.html`.
+| Path | What it is |
+|---|---|
+| `site/` | The OSH website, served as static files |
+| `backend/volunteers/` | The API behind `/api/v1`. No dependencies apart from the optional SQLite driver. |
+| `api/v1.js` | The Vercel function for the API |
+| `server.mjs` | Local server for the site and the API |
+| `docs/volunteer-api.md` | Full API reference: every endpoint, examples, ranking rules, setup |
+| `test/` | End-to-end API tests |
+| `mirror/newbi/`, `scripts/mirror.mjs` | An archived mirror of the earlier newbi.live landing site. It is not served. |
+| `newbi-clone/` | A separate React + Express + MongoDB rebuild from earlier. See [its README](newbi-clone/README.md). |
 
 ## Prototype mode
 
@@ -117,20 +101,20 @@ To make the prototype work without any Vercel setup, these are hardcoded in `PRO
 | Setting | Prototype value |
 |---|---|
 | `APP_SECRET` | A fixed random secret |
-| `ADMIN_API_KEY` | `newbi-admin-2026`. Sign in with `POST /api/v1/admin/login` `{ "apiKey": "newbi-admin-2026", "name": "Your name" }`. |
+| `ADMIN_API_KEY` | `newbi-admin-2026`, for the [Admin Dashboard](https://newbi-clone.vercel.app/admin) |
 | OTP | Shown on screen instead of sent by SMS |
-| Demo mode | Demo events (two each in Delhi, Mumbai and Bengaluru, one each in Hyderabad, Pune, Kolkata and Chennai), demo volunteers for the Delhi leaderboard, and the [demo account](#demo-account) |
+| Demo mode | The demo events, five demo volunteers in Delhi and the [demo account](#demo-data-and-the-demo-account) |
 
 The prototype has two limits:
 
-- **It isn't secure.** This repo is public, so anyone can read the admin key and token secret. With on-screen OTPs, anyone can sign in as any number. **Don't collect real volunteers' details yet.**
-- **The hosted link needs a shared database.** Vercel runs several copies of the API at once, each with its own temporary disk. A file database can't be shared between them, and that includes SQLite. So right after signing up, some requests land on a copy that has never seen the account, and the portal drops back to step 1. Local runs (`npm start`) use SQLite and don't have this problem. On Vercel, add **Upstash for Redis** (step 1 below), which all copies share. It can't be hardcoded, because the database has to be created with your Vercel login first.
+- **It isn't secure.** This repo is public, so anyone can read the admin key and token secret. With on-screen OTPs, anyone can sign in as any number. **Don't collect real volunteers' or vendors' details yet.**
+- **The hosted link needs a shared database.** Vercel runs several copies of the API at once, each with its own temporary disk, and a file database (SQLite included) can't be shared between them. On the hosted site, new sign-ups, vendor registrations, feedback and admin changes can land on a copy that later requests don't reach. Locally they all stick. On Vercel, add **Upstash for Redis** (step 1 below), which all copies share.
 
 ### Moving off the prototype
 
 Set these in Vercel → this project, then **redeploy**. They override the hardcoded values, so no code change is needed:
 
-1. **Storage** → add **Upstash for Redis** and connect it. This sets `KV_REST_API_URL` and `KV_REST_API_TOKEN`. All copies of the API then share one database, so sign-ups stick and the step-1 bounce stops.
+1. **Storage** → add **Upstash for Redis** and connect it. This sets `KV_REST_API_URL` and `KV_REST_API_TOKEN`.
 2. **Settings → Environment Variables:**
    - `APP_SECRET`: your own 32+ random characters. Generate one with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
    - `ADMIN_API_KEY`: your own admin password.
@@ -142,24 +126,4 @@ All variables are listed in [`.env.example`](.env.example).
 
 ## Deploy to Vercel
 
-Pushing to `main` deploys automatically. There is no build step. `vercel.json`:
-
-- serves `site/` as the output directory (so `/volunteer` is `site/volunteer/index.html`)
-- sends `/api/forms` to `api/forms.js`
-- rewrites `/api/v1/*` to the volunteer API in `api/v1.js`
-- falls back to the app shell for unknown routes
-
-## Re-download from the live site
-
-```
-npm run mirror     # refreshes ./site, then re-adds the volunteer banner
-```
-
-## How the mirror works
-
-- `site/` holds the pages and assets exactly as the live site serves them. The exceptions are the volunteer banner in `site/index.html` and the new `site/volunteer/` folder.
-- `server.mjs` serves `site/` with clean URLs (`/creator` → `creator/index.html`). Routes with no page of their own fall back to the app shell.
-- `/api/forms?type=public-feed` and `?type=public-archive` are answered from `site/api/forms.<type>.json`.
-- Form submissions (`POST /api/forms?type=enquiry`) are logged to the console and are never sent to the real site.
-- Case-study photos are still loaded from their original hosts (Cloudinary etc.).
-- "Sign in", "Join free" and the Community links point to `app.newbi.live`, which is a separate app and isn't mirrored.
+Pushing to `main` deploys automatically. There is no build step. `vercel.json` serves `site/` as the output directory, rewrites `/api/v1/*` to `api/v1.js`, and serves `/events/<id>` from `site/events/event.html`.

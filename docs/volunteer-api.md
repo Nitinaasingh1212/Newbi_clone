@@ -1,8 +1,10 @@
-# Volunteer API
+# OSH Entertainment API
 
-The volunteer API serves the on-ground volunteers and workers who help the coordination team at events. Volunteers sign up with their phone (OTP) and Aadhaar, and they see and apply to events in **their city only**. After each event, the coordination team rates them, and those ratings feed a points-based ranking.
+The API behind the OSH Entertainment crew network. Volunteers sign up with their phone (OTP) and Aadhaar, and they see and send interest for events in **their city only** (the site's "I'm Interested" button calls `apply`). After each event, the coordination team rates them, and those ratings feed a points-based ranking. The public site also uses it for event listings, network numbers, Star Volunteers, vendor registration and feedback, and the admin dashboard for everything the OSH team manages.
 
-- **Volunteer UI:** https://newbi-clone.vercel.app/volunteer (`site/volunteer/index.html`) is built on these endpoints.
+OSH is a crew network, not a ticketing platform: events have volunteer roles and positions, never ticket types.
+
+- **Site:** https://newbi-clone.vercel.app is built on these endpoints (`site/osh/pages/*.js`).
 - **Base URL:** `https://newbi-clone.vercel.app/api/v1` (locally `http://localhost:3000/api/v1`)
 - **Format:** JSON in, JSON out. Every response has `success: true|false`.
 - **Auth:** `Authorization: Bearer <token>`. Volunteers get a token from the OTP flow. Admins get one from `/admin/login`.
@@ -34,9 +36,17 @@ GET  /leaderboard        city leaderboard
 |---|---|---|---|
 | GET | `/api/v1` | — | List of endpoints |
 | GET | `/api/v1/health` | — | Status and setup warnings |
+| GET | `/api/v1/options` | — | Choice lists for the forms: categories, network cities, departments, experience, availability, vendor and feedback categories |
 | GET | `/api/v1/cities` | — | Cities with volunteers/events and upcoming event counts |
 | GET | `/api/v1/ranking/rules` | — | How points, tiers and rank work |
 | GET | `/api/v1/leaderboard` | volunteer or admin | Ranking for a city (`?city=`) or everyone (`?city=all`) |
+| **Public site** | | | |
+| GET | `/api/v1/events` | — | Upcoming events, all cities (`?q=&category=&city=`), with counts per category and city |
+| GET | `/api/v1/events/:eventId` | — | One event with its roles and open positions |
+| GET | `/api/v1/stats` | — | Network numbers: upcoming events, active cities, open positions, interest responses |
+| GET | `/api/v1/star-volunteers` | — | Top-ranked volunteers (first name and initial only) |
+| POST | `/api/v1/vendors` | — | Vendor registration |
+| POST | `/api/v1/feedback` | — | Volunteer feedback to OSH management |
 | **Volunteer** | | | |
 | POST | `/api/v1/auth/send-otp` | — | Send an OTP to a mobile number |
 | POST | `/api/v1/auth/verify-otp` | — | Check the OTP and get a login or registration token |
@@ -45,11 +55,12 @@ GET  /leaderboard        city leaderboard
 | PATCH | `/api/v1/volunteer/me` | volunteer | Update profile (including city) |
 | GET | `/api/v1/volunteer/events` | volunteer | Upcoming open events **in my city** |
 | GET | `/api/v1/volunteer/events/:eventId` | volunteer | One event |
-| POST | `/api/v1/volunteer/events/:eventId/apply` | volunteer | Apply to work the event |
-| POST | `/api/v1/volunteer/events/:eventId/withdraw` | volunteer | Withdraw before the event |
-| GET | `/api/v1/volunteer/applications` | volunteer | My applications, statuses and ratings |
+| POST | `/api/v1/volunteer/events/:eventId/apply` | volunteer | Send interest ("I'm Interested") for an event in my city |
+| POST | `/api/v1/volunteer/events/:eventId/withdraw` | volunteer | Withdraw my interest before the event |
+| GET | `/api/v1/volunteer/applications` | volunteer | My interest responses, statuses and ratings |
 | **Admin / coordination team** | | | |
 | POST | `/api/v1/admin/login` | — | Admin API key → admin token |
+| GET | `/api/v1/admin/overview` | admin | Dashboard counts: events, volunteers, vendors, interested responses, feedback |
 | GET | `/api/v1/admin/events` | admin | List events (`?city=&status=&from=&to=`) |
 | POST | `/api/v1/admin/events` | admin | Create an event in a city |
 | GET | `/api/v1/admin/events/:eventId` | admin | One event with applicant counts |
@@ -60,6 +71,10 @@ GET  /leaderboard        city leaderboard
 | GET | `/api/v1/admin/volunteers` | admin | Search volunteers (`?city=&kycStatus=&status=&q=&sort=`) |
 | GET | `/api/v1/admin/volunteers/:volunteerId` | admin | Full profile, stats, rank and history |
 | PATCH | `/api/v1/admin/volunteers/:volunteerId` | admin | Verify/reject Aadhaar KYC, suspend/reactivate |
+| GET | `/api/v1/admin/vendors` | admin | Vendor registrations (`?status=&city=&category=`) |
+| PATCH | `/api/v1/admin/vendors/:vendorId` | admin | Verify or reject a vendor |
+| GET | `/api/v1/admin/feedback` | admin | Feedback inbox (`?status=new|resolved&category=`) |
+| PATCH | `/api/v1/admin/feedback/:feedbackId` | admin | Mark feedback resolved, or new again |
 
 List endpoints accept `?limit=` (1–200, default 50) and `?offset=`.
 
@@ -127,7 +142,10 @@ Header: `Authorization: Bearer <registrationToken>`
   "gender": "male",
   "area": "Saket",
   "email": "rahul@example.com",
-  "skills": ["crowd management", "ticketing"],
+  "department": "Crowd management",
+  "experience": "Fresher",
+  "availability": "Event based",
+  "skills": ["crowd management", "guest relations"],
   "languages": ["Hindi", "English"],
   "emergencyContact": { "name": "Sunita Sharma", "phone": "9811111111", "relation": "mother" }
 }
@@ -140,6 +158,9 @@ Header: `Authorization: Bearer <registrationToken>`
 | `dateOfBirth` | yes | `YYYY-MM-DD`, must be 18+ |
 | `city` | yes | Any spelling. It is normalised (see [Cities](#cities)). |
 | `gender` | no | `male`, `female`, `other`, `prefer_not_to_say` |
+| `department` | no (the site asks for it) | One of the `departments` from `GET /options`, e.g. `Crowd management`, `Guest relations & hospitality`, `Stage & backstage` |
+| `experience` | no | `Fresher`, `1 to 5 events`, `6 to 20 events`, `More than 20 events` |
+| `availability` | no | `Event based`, `Weekends only`, `Weekdays`, `Full time` |
 | `area`, `email`, `skills`, `languages`, `emergencyContact` | no | `skills`/`languages` can be an array or a comma-separated string |
 
 Unknown fields are rejected (`unknown_field`), which catches typos like `aadhar`.
@@ -161,7 +182,10 @@ Response `201`:
     "city": "Delhi",
     "cityKey": "delhi",
     "area": "Saket",
-    "skills": ["crowd management", "ticketing"],
+    "department": "Crowd management",
+    "experience": "Fresher",
+    "availability": "Event based",
+    "skills": ["crowd management", "guest relations"],
     "languages": ["Hindi", "English"],
     "emergencyContact": { "name": "Sunita Sharma", "phone": "+919811111111", "relation": "mother" },
     "aadhaar": "XXXX XXXX 0124",
@@ -183,7 +207,7 @@ This returns the profile plus `stats` and `standing`:
 
 ```json
 "stats": {
-  "points": 20, "tier": "Bronze", "nextTier": { "name": "Silver", "pointsNeeded": 30 },
+  "points": 20, "tier": "New Joiner", "nextTier": { "name": "Trained", "pointsNeeded": 30 },
   "completedEvents": 1, "noShows": 0, "averageRating": 5, "ratingsCount": 1, "reliability": 100
 },
 "standing": {
@@ -224,7 +248,7 @@ This returns upcoming (today or later, India time), `open` events whose city mat
       "date": "2026-11-14",
       "startTime": "16:00",
       "endTime": "23:00",
-      "roles": ["Entry gate", "Ticketing", "Backstage"],
+      "roles": ["Guest relations", "Registration desk", "Stage coordination"],
       "volunteersNeeded": 12,
       "slotsLeft": 12,
       "status": "open",
@@ -243,7 +267,7 @@ This returns the same shape for one event. It is allowed if the event is in the 
 ### `POST /volunteer/events/:eventId/apply`
 
 ```json
-{ "preferredRole": "Ticketing", "note": "Available from 3pm" }
+{ "preferredRole": "Registration desk", "note": "Available from 3pm" }
 ```
 
 The body is optional. If the event lists `roles`, `preferredRole` must be one of them.
@@ -269,7 +293,68 @@ This works while the application is `applied` or `approved` and the event hasn't
 
 This returns the volunteer's history, newest event first, with each review (`outcome`, `rating`, `comment`). Filter with `?status=applied|approved|rejected|withdrawn|completed|no_show`.
 
+## Public site
+
+### `GET /events`
+
+Every upcoming open event in all cities, soonest first. Filters: `q` (searches title, description, venue, city, category, tags and roles), `category` (one of the four categories) and `city` (any spelling, normalised). The response also counts the unfiltered upcoming events per category and per city, for the home page tiles and the city filter:
+
+```json
+{
+  "success": true,
+  "total": 12,
+  "categories": [{ "name": "Music & Concerts", "count": 4 }, { "name": "Corporate Events", "count": 3 }, { "name": "College Festivals", "count": 3 }, { "name": "Private Events", "count": 2 }],
+  "cities": [{ "city": "Delhi", "cityKey": "delhi", "count": 2 }, { "city": "Lucknow", "cityKey": "lucknow", "count": 2 }, …],
+  "events": [
+    {
+      "id": "evt_demo_djnight", "title": "DJ Night – Live Concert", "category": "Music & Concerts",
+      "city": "Lucknow", "venue": "Phoenix Palassio, Lucknow", "date": "2026-11-15", "startTime": "18:00", "endTime": "23:30",
+      "description": "Live music, artist hospitality and crowd operations. …",
+      "roles": ["Crowd operations", "Artist hospitality", "Entry & wristbands"],
+      "volunteersNeeded": 25, "slotsLeft": 25, "highlights": ["Headline DJ", …], "tags": ["DJ", …],
+      "image": "/volunteer/img/events/edm.jpg", "demo": true, "status": "open"
+    }
+  ]
+}
+```
+
+The categories are `Music & Concerts`, `Corporate Events`, `College Festivals` and `Private Events`. `demo: true` marks the prototype's demo events.
+
+### `GET /stats`
+
+`{ upcomingEvents, activeCities, volunteerPositions, interestResponses, volunteers, verifiedVendors }`, computed live. The home page's network snapshot uses it.
+
+### `GET /star-volunteers`
+
+The top-ranked volunteers across all cities (`?limit=`, default 6, at most 24), for the home page's Star Volunteers. Each row has `rank`, `name` ("Arjun M."), `city`, `department`, `verified` (Aadhaar), `tier`, `points`, `completedEvents` and `averageRating`. No phone numbers or ids.
+
+### `POST /vendors`
+
+```json
+{
+  "companyName": "Sonic Sound Co.",
+  "contactPerson": "Ravi Kumar",
+  "phone": "98765 43210",
+  "city": "Lucknow",
+  "category": "Sound & lights",
+  "gstin": "09AAACH7409R1ZZ",
+  "services": "Line arrays, DJ consoles and lighting for 5,000 people."
+}
+```
+
+`companyName`, `contactPerson`, `phone`, `city` and `category` (one of `vendorCategories` from `GET /options`) are required. `gstin` is optional; when given it must be a well-formed 15-character GSTIN (`invalid_gstin`). One registration per mobile number (`409 vendor_exists`). Vendors start as `pending`; the OSH team verifies them. 10 registrations per IP per hour.
+
+### `POST /feedback`
+
+```json
+{ "category": "Work environment", "name": "Sana", "message": "Drinking water ran out at gate 3 by 7 pm." }
+```
+
+`category` is one of `feedbackCategories` from `GET /options`. `name` is optional (anonymous otherwise). `message` is 10–2000 characters. Feedback isn't linked to an account, a phone number or an IP address, and only admins can read it. 10 messages per IP per hour.
+
 ## Admin / coordination team
+
+The site's [Admin Dashboard](https://newbi-clone.vercel.app/admin) uses these endpoints.
 
 ### `POST /admin/login`
 
@@ -279,27 +364,41 @@ This returns the volunteer's history, newest event first, with each review (`out
 
 This returns a 12-hour admin token. `name` is recorded on everything this admin does (`createdBy`, `decidedBy`, `reviewedBy`, KYC `reviewedBy`). The endpoint allows 10 attempts per IP per 15 minutes.
 
+### `GET /admin/overview`
+
+```json
+{
+  "events": { "listed": 15, "upcoming": 12 },
+  "volunteers": { "total": 5, "kycPending": 0 },
+  "vendors": { "total": 2, "pending": 1 },
+  "interested": { "total": 16, "awaitingDecision": 1 },
+  "feedback": { "total": 3, "new": 2 }
+}
+```
+
 ### `POST /admin/events`
 
 ```json
 {
-  "title": "Diwali Mela 2026",
+  "title": "Corporate Annual Awards",
+  "category": "Corporate Events",
   "city": "Delhi",
-  "venue": "JLN Stadium",
-  "date": "2026-11-14",
-  "volunteersNeeded": 12,
-  "description": "Evening fair with 40 stalls and a live stage.",
-  "address": "Gate 14, Lodhi Road",
-  "startTime": "16:00",
+  "venue": "Aerocity, Delhi",
+  "date": "2026-11-20",
+  "volunteersNeeded": 18,
+  "description": "Guest relations, registration and stage coordination. An awards night for 600 guests.",
+  "address": "Hospitality District, Aerocity",
+  "startTime": "17:00",
   "endTime": "23:00",
-  "roles": ["Entry gate", "Ticketing", "Backstage"],
+  "roles": ["Guest relations", "Registration desk", "Stage coordination"],
+  "highlights": ["Red Carpet", "Award Ceremony", "Live Band"],
   "status": "open",
   "image": "https://res.cloudinary.com/<your-cloud>/image/upload/diwali-mela.jpg",
   "imageCredit": "Photo: Newbi"
 }
 ```
 
-`title`, `city`, `venue`, `date` (today or later) and `volunteersNeeded` (1–5000) are required. Times use 24-hour `HH:MM`. `status` defaults to `open`.
+`title`, `city`, `venue`, `date` (today or later) and `volunteersNeeded` (1–5000) are required. Times use 24-hour `HH:MM`. `status` defaults to `open`. `category` is one of the four categories; `tags` and `highlights` are short lists. The first sentence of `description` is what the event cards show.
 
 Optional photo fields, shown on the volunteer's event card:
 
@@ -327,12 +426,12 @@ This returns the event plus every applicant. Pending applicants come first and, 
 {
   "id": "app_OcFIJuOumk3b",
   "status": "applied",
-  "preferredRole": "Ticketing",
+  "preferredRole": "Registration desk",
   "note": "Available from 3pm",
   "volunteer": {
     "id": "vol_pAvQOXBRfVYn", "name": "Rahul Kumar Sharma", "phone": "+919876543210", "city": "Delhi",
-    "kycStatus": "verified", "status": "active",
-    "points": 120, "tier": "Silver", "completedEvents": 9, "noShows": 0, "averageRating": 4.6
+    "department": "Crowd management", "kycStatus": "verified", "status": "active",
+    "points": 120, "tier": "Trained", "completedEvents": 9, "noShows": 0, "averageRating": 4.6
   }
 }
 ```
@@ -388,6 +487,20 @@ This returns the full profile, stats, city/overall rank and every application wi
 
 Suspended volunteers can't sign in or use any volunteer endpoint, and they drop off the leaderboard.
 
+### `GET /admin/vendors`, `PATCH /admin/vendors/:vendorId`
+
+Newest first, filtered by `status` (`pending|verified|rejected`), `city` and `category`. To review one:
+
+```json
+{ "status": "verified", "note": "GST checked" }
+```
+
+The vendor gets `reviewedBy`, `reviewedAt` and `reviewNote`. `GET /stats` counts verified vendors.
+
+### `GET /admin/feedback`, `PATCH /admin/feedback/:feedbackId`
+
+Newest first, filtered by `status` (`new|resolved`) and `category`. `{ "status": "resolved" }` records `resolvedBy` and `resolvedAt`; `{ "status": "new" }` reopens it.
+
 ## Ranking
 
 `GET /ranking/rules` returns the live numbers. The defaults are in `backend/volunteers/ranking.js` (`RANKING`):
@@ -400,12 +513,14 @@ Suspended volunteers can't sign in or use any volunteer endpoint, and they drop 
 
 Points never go below 0.
 
-| Tier | Points |
-|---|---|
-| Bronze | 0+ |
-| Silver | 50+ |
-| Gold | 150+ |
-| Platinum | 300+ |
+| Tier | Points | Shown on the site as |
+|---|---|---|
+| New Joiner | 0+ | Newly registered volunteer |
+| Trained | 50+ | ★★★☆☆ Completed basic event training |
+| Experienced | 150+ | ★★★★☆ Consistent, reliable event crew |
+| 5-Star Elite | 300+ | ★★★★★ Outstanding performance and leadership |
+
+`GET /ranking/rules` returns each tier's `about` text too.
 
 Volunteers are ordered by points, then average rating, then events completed. Volunteers level on all three share a rank. A volunteer appears on the leaderboard after their first reviewed event. Stats come straight from the reviews and are never stored separately, so correcting a review updates everything.
 
@@ -423,8 +538,8 @@ Each volunteer's stats also include `reliability`: the percentage of reviewed ev
   "scope": "Delhi",
   "rankedVolunteers": 2,
   "leaderboard": [
-    { "rank": 1, "name": "Rahul S.", "isYou": false, "city": "Delhi", "tier": "Bronze", "points": 20, "completedEvents": 1, "averageRating": 5, "reliability": 100 },
-    { "rank": 2, "name": "Asha P.", "isYou": true, "city": "Delhi", "tier": "Bronze", "points": 10, "completedEvents": 1, "averageRating": 3, "reliability": 100 }
+    { "rank": 1, "name": "Rahul S.", "isYou": false, "city": "Delhi", "tier": "New Joiner", "points": 20, "completedEvents": 1, "averageRating": 5, "reliability": 100 },
+    { "rank": 2, "name": "Asha P.", "isYou": true, "city": "Delhi", "tier": "New Joiner", "points": 10, "completedEvents": 1, "averageRating": 3, "reliability": 100 }
   ],
   "you": { "rank": 2, "name": "Asha P.", "isYou": true, … }
 }
@@ -447,7 +562,7 @@ City is what links volunteers to events. Each city name is reduced to a `cityKey
    - Poona → Pune
    - and a few more
 
-So a volunteer who typed "new delhi" sees events created for "Delhi". The aliases live in `CITY_ALIASES` in `backend/volunteers/validate.js`. Noida, Gurugram, Ghaziabad and the other NCR cities stay separate cities.
+The OSH network list (`networkCities` in `GET /options`) includes the regions Punjab and Haryana; they work exactly like cities. So a volunteer who typed "new delhi" sees events created for "Delhi". The aliases live in `CITY_ALIASES` in `backend/volunteers/validate.js`. Noida, Gurugram, Ghaziabad and the other NCR cities stay separate cities.
 
 `GET /cities` lists every city that has events or volunteers, with its count of upcoming open events. It can feed a city picker.
 
@@ -463,8 +578,8 @@ So a volunteer who typed "new delhi" sees events created for "Delhi". The aliase
 | 401 | Missing, invalid or expired token, or wrong admin key |
 | 403 | Wrong kind of token, `city_mismatch`, `account_suspended`, `kyc_rejected` |
 | 404 | No such event/volunteer/application or endpoint |
-| 409 | Valid request that the current state doesn't allow (`already_registered`, `aadhaar_in_use`, `event_full`, `kyc_not_verified`, `kyc_locked`, …) |
-| 429 | OTP or login rate limit. `details.retryAfterSeconds` and a `Retry-After` header are included when known |
+| 409 | Valid request that the current state doesn't allow (`already_registered`, `aadhaar_in_use`, `event_full`, `kyc_not_verified`, `kyc_locked`, `vendor_exists`, …) |
+| 429 | OTP, login, vendor or feedback rate limit. `details.retryAfterSeconds` and a `Retry-After` header are included when known |
 | 503 | Server not configured (`not_configured`, `sms_not_configured`) |
 
 ## Setup
@@ -478,9 +593,9 @@ The API runs with no configuration, locally and on Vercel. These prototype value
 | `APP_SECRET` | A fixed random 64-character secret |
 | `ADMIN_API_KEY` | `newbi-admin-2026` |
 | OTP delivery | Dev mode: the OTP is returned in the API response and shown on the portal, until Twilio is configured |
-| Demo mode | Demo events in seven cities, five demo volunteers in Delhi with rated history, and a demo account (see below). It is defined in `backend/volunteers/demo-data.js`. |
+| Demo mode | The 12 crew opportunities from the OSH brief across nine network cities, three past events, five demo volunteers in Delhi with rated history, and a demo account (see below). It is defined in `backend/volunteers/demo-data.js`. Demo events from older versions are removed (or cancelled, if real volunteers sent interest). |
 
-**Demo account:** phone `99999 99999`, OTP `123456`. The code is fixed, no SMS is sent, and nothing is stored to check it, so it signs in on any server copy. It signs in as Riya Kapoor (`vol_demo_riya`), Delhi, KYC verified, 55 points, Silver, #2 of 5 in Delhi. `GET /health` returns these details as `demoLogin`.
+**Demo account:** phone `99999 99999`, OTP `123456`. The code is fixed, no SMS is sent, and nothing is stored to check it, so it signs in on any server copy. It signs in as Riya Kapoor (`vol_demo_riya`), Delhi, KYC verified, 55 points, Trained, #2 of 5 in Delhi. `GET /health` returns these details as `demoLogin`.
 
 All demo documents have fixed ids (`evt_demo_*`, `vol_demo_*`, `app_demo_*`) and dates relative to today. Each server instance rewrites them once a day, before its first request. Copies of the function that don't share storage therefore all hold the same demo data.
 
@@ -496,7 +611,7 @@ The prototype has three limits:
 | Where | Store |
 |---|---|
 | `KV_REST_API_URL`/`KV_REST_API_TOKEN` set | Upstash Redis, shared by every copy. Use this for the hosted site. |
-| Local runs (`npm start`) | **SQLite** at `data/newbi.sqlite`, via `better-sqlite3` (installed by `npm install`). It has `volunteers`, `events` and `applications` tables, with readable generated columns (`name`, `city`, `status`, …) and the full record in `doc`, plus `kv` (lookups) and `temp` (OTPs, rate limits). |
+| Local runs (`npm start`) | **SQLite** at `data/newbi.sqlite`, via `better-sqlite3` (installed by `npm install`). It has `volunteers`, `events`, `applications`, `vendors` and `feedback` tables, with readable generated columns (`name`, `city`, `status`, …) and the full record in `doc`, plus `kv` (lookups) and `temp` (OTPs, rate limits). |
 | Vercel without Redis, or SQLite not installed | A JSON file (`/tmp/volunteer-db.json` on Vercel, `data/volunteer-db.json` locally) |
 
 ### Moving off the prototype
@@ -523,7 +638,7 @@ After changing variables in Vercel, redeploy. Then open `https://newbi-clone.ver
 npm test
 ```
 
-The tests run the whole flow against an in-memory store: OTP, registration rules, city filtering, KYC gating, reviews, ranking, routing and the Vercel adapter.
+The tests run the whole flow against in-memory stores: OTP, registration rules, city filtering, KYC gating, reviews, ranking, the public listings and Star Volunteers, vendors, feedback, the admin overview, demo clean-up, routing, SQLite and the Vercel adapter.
 
 ## Not built yet
 

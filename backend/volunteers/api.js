@@ -1,5 +1,6 @@
-// The volunteer API (mounted at /api/v1): phone-OTP sign-in, Aadhaar-backed registration,
-// events by city, applications, coordinator ratings and the ranking built from them.
+// The OSH Entertainment API (mounted at /api/v1): phone-OTP sign-in, Aadhaar-backed volunteer
+// registration, crew opportunities by city, interest (applications), coordinator ratings and
+// the ranking built from them, vendor registration, feedback and the admin dashboard.
 //
 // handle() takes a plain request ({ method, path, query, headers, body, ip }) and returns
 // { status, headers, body }, so server.mjs (local) and api/v1.js (Vercel) share it.
@@ -39,7 +40,7 @@ export function createVolunteerApi(options = {}) {
   }
 
   define('GET', '/', { open: true, summary: 'This list of endpoints' }, () => ({
-    name: 'Newbi volunteer API',
+    name: 'OSH Entertainment API',
     docs: 'docs/volunteer-api.md in the repository',
     endpoints: routes.map((r) => ({ method: r.method, path: API_PREFIX + (r.pattern === '/' ? '' : r.pattern), auth: r.auth, summary: r.summary })),
   }));

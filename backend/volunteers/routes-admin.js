@@ -1,14 +1,16 @@
-// Admin / coordination-team endpoints: sign in with the admin API key, manage events per
-// city, approve or reject applicants, rate volunteers after an event, and review volunteer
-// KYC (Aadhaar) and account status.
+// Admin / coordination-team endpoints (the OSH Admin Dashboard): sign in with the admin API
+// key, see the overview, manage events per city, approve or reject interested volunteers,
+// rate volunteers after an event, review volunteer KYC (Aadhaar) and account status, verify
+// vendors, and read the feedback inbox.
 import { LIMITS } from './config.js';
 import { keyedHash, safeEqual, signToken } from './tokens.js';
 import { applicationView, byEventDate, eventCounts, eventView, volunteerView } from './service.js';
 import {
   CATEGORIES,
+  FEEDBACK_CATEGORIES,
   HttpError,
+  VENDOR_CATEGORIES,
   badRequest,
-  tickets,
   cityField,
   clockTime,
   imageUrl,
@@ -23,9 +25,11 @@ import {
 
 const EVENT_FIELDS = [
   'title', 'description', 'city', 'venue', 'address', 'date', 'startTime', 'endTime', 'roles', 'volunteersNeeded', 'status',
-  'image', 'imageCredit', 'imageCreditUrl', 'category', 'tags', 'highlights', 'tickets',
+  'image', 'imageCredit', 'imageCreditUrl', 'category', 'tags', 'highlights',
 ];
 const EVENT_STATUSES = ['open', 'closed', 'completed', 'cancelled'];
+const VENDOR_STATUSES = ['pending', 'verified', 'rejected'];
+const FEEDBACK_STATUSES = ['new', 'resolved'];
 const APPLICATION_STATUSES = ['applied', 'approved', 'rejected', 'withdrawn', 'completed', 'no_show'];
 // Order applicants are listed in for an event: pending first, then the confirmed team.
 const STATUS_ORDER = { applied: 0, approved: 1, completed: 2, no_show: 3, rejected: 4, withdrawn: 5 };
@@ -52,7 +56,6 @@ function readEventFields(body, { creating }) {
   if (has('category')) out.category = oneOf(body.category, 'category', CATEGORIES);
   if (has('tags')) out.tags = stringList(body.tags, 'tags', { maxItems: 8, maxLength: 30 });
   if (has('highlights')) out.highlights = stringList(body.highlights, 'highlights', { maxItems: 8, maxLength: 40 });
-  if (has('tickets')) out.tickets = tickets(body.tickets);
   return out;
 }
 
@@ -66,6 +69,7 @@ export function adminRoutes(define, svc) {
     name: v.name,
     phone: v.phone,
     city: v.city,
+    department: v.department ?? null,
     kycStatus: v.kyc.status,
     status: v.status,
     points: stats.points,
@@ -340,31 +344,99 @@ export function adminRoutes(define, svc) {
     },
   );
 
-  // ---- Ticket bookings and organiser enquiries --------------------------------------
+  // ---- Dashboard overview -----------------------------------------------------------
 
-  define('GET', '/admin/events/:eventId/bookings', { auth: 'admin', summary: 'Ticket bookings for an event' }, async ({ params }) => {
-    const event = await svc.requireDoc('events', params.eventId, 'Event');
-    const bookings = (await db.all('bookings'))
-      .filter((b) => b.eventId === event.id)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  define('GET', '/admin/overview', { auth: 'admin', summary: 'Counts for the admin dashboard' }, async () => {
+    const today = svc.today();
+    const [events, volunteers, applications, vendors, feedback] = await Promise.all([
+      db.all('events'),
+      db.all('volunteers'),
+      db.all('applications'),
+      db.all('vendors'),
+      db.all('feedback'),
+    ]);
     return {
-      event: eventView(event, { admin: true }),
-      total: bookings.length,
-      byTicket: Object.values(
-        bookings.reduce((acc, b) => {
-          acc[b.ticket.id] ??= { ticket: b.ticket.name, bookings: 0, amount: 0 };
-          acc[b.ticket.id].bookings++;
-          acc[b.ticket.id].amount += b.amount;
-          return acc;
-        }, {}),
-      ),
-      bookings,
+      events: { listed: events.length, upcoming: events.filter((e) => e.status === 'open' && e.date >= today).length },
+      volunteers: { total: volunteers.length, kycPending: volunteers.filter((v) => v.kyc.status === 'pending').length },
+      vendors: { total: vendors.length, pending: vendors.filter((v) => v.status === 'pending').length },
+      interested: {
+        total: applications.filter((a) => a.status !== 'withdrawn').length,
+        awaitingDecision: applications.filter((a) => a.status === 'applied').length,
+      },
+      feedback: { total: feedback.length, new: feedback.filter((f) => f.status === 'new').length },
     };
   });
 
-  define('GET', '/admin/enquiries', { auth: 'admin', summary: 'Event enquiries from the Organize page, newest first' }, async ({ query }) => {
-    const enquiries = (await db.all('enquiries')).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-    const { limit, offset } = pagination(query);
-    return { total: enquiries.length, enquiries: enquiries.slice(offset, offset + limit) };
-  });
+  // ---- Vendors -----------------------------------------------------------------------
+
+  define(
+    'GET',
+    '/admin/vendors',
+    { auth: 'admin', summary: 'Vendor registrations, newest first (?status=&city=&category=)' },
+    async ({ query }) => {
+      const status = oneOf(query.get('status'), 'status', VENDOR_STATUSES);
+      const city = cityField(query.get('city'));
+      const category = oneOf(query.get('category'), 'category', VENDOR_CATEGORIES);
+      const vendors = (await db.all('vendors'))
+        .filter((v) => (!status || v.status === status) && (!city || v.cityKey === city.cityKey) && (!category || v.category === category))
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      const { limit, offset } = pagination(query);
+      return { total: vendors.length, vendors: vendors.slice(offset, offset + limit) };
+    },
+  );
+
+  define(
+    'PATCH',
+    '/admin/vendors/:vendorId',
+    { auth: 'admin', summary: 'Verify or reject a vendor ({ status: "verified" | "rejected" | "pending", note })' },
+    async ({ params, body, auth }) => {
+      onlyFields(body, ['status', 'note']);
+      const vendor = await svc.requireDoc('vendors', params.vendorId, 'Vendor');
+      const now = svc.nowIso();
+      Object.assign(vendor, {
+        status: oneOf(body.status, 'status', VENDOR_STATUSES, { required: true }),
+        reviewNote: text(body.note, 'note', { max: 300 }),
+        reviewedAt: now,
+        reviewedBy: adminName(auth),
+        updatedAt: now,
+      });
+      await db.put('vendors', vendor);
+      return { vendor };
+    },
+  );
+
+  // ---- Feedback inbox ----------------------------------------------------------------
+
+  define(
+    'GET',
+    '/admin/feedback',
+    { auth: 'admin', summary: 'Volunteer feedback, newest first (?status=new|resolved&category=)' },
+    async ({ query }) => {
+      const status = oneOf(query.get('status'), 'status', FEEDBACK_STATUSES);
+      const category = oneOf(query.get('category'), 'category', FEEDBACK_CATEGORIES);
+      const feedback = (await db.all('feedback'))
+        .filter((f) => (!status || f.status === status) && (!category || f.category === category))
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      const { limit, offset } = pagination(query);
+      return { total: feedback.length, feedback: feedback.slice(offset, offset + limit) };
+    },
+  );
+
+  define(
+    'PATCH',
+    '/admin/feedback/:feedbackId',
+    { auth: 'admin', summary: 'Mark feedback resolved, or new again ({ status })' },
+    async ({ params, body, auth }) => {
+      onlyFields(body, ['status']);
+      const item = await svc.requireDoc('feedback', params.feedbackId, 'Feedback');
+      const status = oneOf(body.status, 'status', FEEDBACK_STATUSES, { required: true });
+      Object.assign(item, {
+        status,
+        resolvedAt: status === 'resolved' ? svc.nowIso() : null,
+        resolvedBy: status === 'resolved' ? adminName(auth) : null,
+      });
+      await db.put('feedback', item);
+      return { feedback: item };
+    },
+  );
 }

@@ -14,10 +14,23 @@ export class HttpError extends Error {
 export const badRequest = (code, message, details) => new HttpError(400, code, message, details);
 
 export const GENDERS = ['male', 'female', 'other', 'prefer_not_to_say'];
-export const CATEGORIES = ['Cultural', 'Technical', 'Workshop', 'Sports', 'Fest', 'Concert', 'Comedy', 'Activation'];
-
-export const slugify = (value) =>
-  String(value).toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+// Choice lists shared by the API and the site's forms (GET /api/v1/options returns them).
+export const CATEGORIES = ['Music & Concerts', 'Corporate Events', 'College Festivals', 'Private Events'];
+// The cities and regions OSH runs crews in, in the order the site lists them.
+export const NETWORK_CITIES = ['Lucknow', 'Delhi', 'Mumbai', 'Punjab', 'Haryana', 'Gurugram', 'Chennai', 'Jaipur', 'Bengaluru'];
+export const DEPARTMENTS = [
+  'Crowd management', 'Guest relations & hospitality', 'Registration & help desk', 'Stage & backstage', 'Artist management',
+  'Production & technical', 'Logistics & runners', 'Security support', 'Social media & content', 'First aid',
+];
+export const EXPERIENCE_LEVELS = ['Fresher', '1 to 5 events', '6 to 20 events', 'More than 20 events'];
+export const AVAILABILITY = ['Event based', 'Weekends only', 'Weekdays', 'Full time'];
+export const VENDOR_CATEGORIES = [
+  'Sound & lights', 'Stage & fabrication', 'Decor & florals', 'Catering & food', 'Photography & video', 'Security & bouncers',
+  'Transport & logistics', 'Staffing & hospitality', 'Artist & talent management', 'Printing & branding', 'Tents & furniture', 'Other',
+];
+export const FEEDBACK_CATEGORIES = [
+  'Work environment', 'Event management', 'Payments & reimbursements', 'Safety concern', 'Misconduct or harassment', 'Suggestion', 'Other',
+];
 
 const isBlank = (v) => v === undefined || v === null || (typeof v === 'string' && v.trim() === '');
 
@@ -106,32 +119,21 @@ export function imageUrl(value, field = 'image') {
   return v;
 }
 
-// Ticket types for an event: [{ name, price (INR), description }] -> each also gets a stable id.
-export function tickets(value) {
-  if (isBlank(value)) return [];
-  if (!Array.isArray(value)) throw invalid('tickets', 'tickets must be a list like [{ "name": "General", "price": 299 }].');
-  if (value.length > 6) throw invalid('tickets', 'An event can have at most 6 ticket types.');
-  const ids = new Set();
-  return value.map((t, i) => {
-    if (!t || typeof t !== 'object' || Array.isArray(t)) throw invalid('tickets', `tickets[${i}] must be an object.`);
-    const name = text(t.name, `tickets[${i}].name`, { required: true, max: 60 });
-    let id = slugify(name) || `ticket-${i + 1}`;
-    while (ids.has(id)) id += '-x';
-    ids.add(id);
-    return {
-      id,
-      name,
-      description: text(t.description, `tickets[${i}].description`, { max: 120 }),
-      price: integer(t.price, `tickets[${i}].price`, { required: true, min: 0, max: 100000 }),
-    };
-  });
-}
-
 export function email(value, { required = false } = {}) {
   if (isBlank(value)) return absent('email', required);
   const v = typeof value === 'string' ? value.trim().toLowerCase() : '';
   if (v.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) {
     throw badRequest('invalid_email', 'Enter a valid email address.', { field: 'email' });
+  }
+  return v;
+}
+
+export function gstin(value) {
+  if (isBlank(value)) return null;
+  const v = typeof value === 'string' ? value.replace(/\s/g, '').toUpperCase() : '';
+  // 2-digit state code, PAN (5 letters, 4 digits, 1 letter), entity number, "Z", check character.
+  if (!/^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(v)) {
+    throw badRequest('invalid_gstin', 'Enter a valid 15-character GST number, or leave it blank.', { field: 'gstin' });
   }
   return v;
 }

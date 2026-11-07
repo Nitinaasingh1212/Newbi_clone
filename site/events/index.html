@@ -4,52 +4,40 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <script>(function(){try{var s=localStorage.getItem('osh_theme');var d=s?s==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.classList.toggle('dark',d)}catch(e){}})();</script>
-  <title>Explore Events | OSH Entertainment</title>
-  <meta name="description" content="Find and book concerts, fests, workshops and sports events near you with OSH Entertainment.">
-  <meta name="theme-color" content="#0D8F64">
+  <title>Upcoming Events | OSH Entertainment</title>
+  <meta name="description" content="Crew and volunteer opportunities at concerts, festivals, corporate and private events across India. Choose an event and tell us you are interested.">
+  <meta name="theme-color" content="#0277C8">
   <link rel="icon" href="/osh/img/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/osh/img/icon-180.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700;800&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
   <link rel="stylesheet" href="/osh/osh.css">
 </head>
 <body>
   <div id="site-header"></div>
-  <main id="main" class="page-glow">
+  <main id="main">
     <div class="container">
       <header class="page-head">
-        <h1>Explore Events</h1>
-        <p>Find and book amazing events near you.</p>
+        <span class="eyebrow">Your next experience starts here</span>
+        <div class="head-row"><h1>Upcoming Events</h1><span class="count-badge" id="count-badge" aria-live="polite"></span></div>
+        <p>Choose an event and tell us you are interested.</p>
       </header>
 
-      <form class="toolbar" id="search-form" role="search">
+      <form class="filters" id="filters" role="search" aria-label="Filter events">
+        <div><label class="sr-only" for="f-city">City</label><select class="input" id="f-city"><option value="">All Cities</option></select></div>
+        <div><label class="sr-only" for="f-cat">Category</label><select class="input" id="f-cat"><option value="">All Categories</option></select></div>
         <div class="search-input">
           <svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
           <label class="sr-only" for="q">Search events</label>
-          <input class="input" id="q" name="q" type="search" placeholder="Search events, categories, or locations…" autocomplete="off">
+          <input class="input" id="q" type="search" placeholder="Search event or city..." autocomplete="off">
         </div>
-        <button class="filter-btn" type="button" id="filter-toggle" aria-expanded="false" aria-controls="filters" aria-label="Filters">
-          <svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
-          <span class="count" id="filter-count" hidden></span>
-        </button>
       </form>
 
-      <div class="card filters" id="filters" hidden>
-        <div class="field"><label for="f-city">City</label><select class="input" id="f-city"><option value="">All cities</option></select></div>
-        <div class="field"><label for="f-price">Price</label>
-          <select class="input" id="f-price"><option value="">Any price</option><option value="free">Free</option><option value="paid">Paid</option></select></div>
-        <div class="field"><label for="f-when">Date</label>
-          <select class="input" id="f-when"><option value="">Any date</option><option value="week">Next 7 days</option><option value="month">Next 30 days</option></select></div>
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-          <label class="check" style="margin:0"><input type="checkbox" id="f-saved"><span>Saved only</span></label>
-          <button class="btn btn-ghost btn-sm" type="button" id="f-reset">Reset</button>
-        </div>
-      </div>
-
-      <div class="chips" id="categories" role="group" aria-label="Category"></div>
-      <p class="results-meta" id="results-meta" aria-live="polite"></p>
-      <div class="ev-grid compact" id="results"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
+      <div class="chips" id="city-chips" role="group" aria-label="Events by city"></div>
+      <div class="results-meta"><span id="results-meta" aria-live="polite"></span><button class="linkbtn" type="button" id="clear" hidden>Clear filters</button></div>
+      <div class="ev-grid" id="results"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
+      <p class="demo-note">Demo events and counts are illustrative. Live event listings will be managed by the OSH Admin team.</p>
     </div>
   </main>
   <div id="site-footer"></div>

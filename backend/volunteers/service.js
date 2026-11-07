@@ -72,6 +72,14 @@ export function createService({ config, store, sendSms, now }) {
   };
 }
 
+// "Rahul Kumar Sharma" -> "Rahul S." so volunteers' full names aren't shown publicly.
+export const shortName = (name) => {
+  const parts = name.split(' ');
+  return parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1][0]}.` : name;
+};
+
+export const isDemoEventId = (id) => typeof id === 'string' && id.startsWith('evt_demo_');
+
 export function eventCounts(applications) {
   const counts = { applied: 0, approved: 0, rejected: 0, withdrawn: 0, completed: 0, noShow: 0 };
   for (const app of applications) counts[app.status === 'no_show' ? 'noShow' : app.status]++;
@@ -95,6 +103,9 @@ export function volunteerView(v, { stats, standing, admin = false } = {}) {
     city: v.city,
     cityKey: v.cityKey,
     area: v.area,
+    department: v.department ?? null,
+    experience: v.experience ?? null,
+    availability: v.availability ?? null,
     skills: v.skills,
     languages: v.languages,
     emergencyContact: v.emergencyContact,
@@ -130,13 +141,11 @@ export function eventView(e, { counts, admin = false, myApplication } = {}) {
     category: e.category ?? null,
     tags: e.tags ?? [],
     highlights: e.highlights ?? [],
-    tickets: e.tickets ?? [],
-    // Cheapest ticket, or null when the event has no ticket types.
-    priceFrom: e.tickets?.length ? Math.min(...e.tickets.map((t) => t.price)) : null,
     image: e.image ?? null,
     imageCredit: e.imageCredit ?? null,
     imageCreditUrl: e.imageCreditUrl ?? null,
     volunteersNeeded: e.volunteersNeeded,
+    ...(isDemoEventId(e.id) && { demo: true }),
     ...(counts && { slotsLeft: Math.max(0, e.volunteersNeeded - counts.filled) }),
     status: e.status,
     ...(admin

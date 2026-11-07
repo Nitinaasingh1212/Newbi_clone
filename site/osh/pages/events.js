@@ -1,110 +1,91 @@
-// Explore Events: loads every upcoming event once, then searches and filters in the
-// browser. Filters are mirrored in the URL (?q=&category=&city=&price=&when=&saved=1).
+// Upcoming Events: every open crew opportunity, filtered here by city, category and a search
+// box. Filters are kept in the URL (?city=&category=&q=) so links like /events?city=Delhi work.
 (function () {
   'use strict';
   var O = window.OSH;
-  var els = {
-    form: document.getElementById('search-form'), q: document.getElementById('q'),
-    toggle: document.getElementById('filter-toggle'), count: document.getElementById('filter-count'), filters: document.getElementById('filters'),
-    city: document.getElementById('f-city'), price: document.getElementById('f-price'), when: document.getElementById('f-when'),
-    savedOnly: document.getElementById('f-saved'), reset: document.getElementById('f-reset'),
-    categories: document.getElementById('categories'), meta: document.getElementById('results-meta'), results: document.getElementById('results'),
-  };
-  var params = new URLSearchParams(location.search);
-  var state = {
-    q: params.get('q') || '', category: params.get('category') || '', city: params.get('city') || '',
-    price: params.get('price') || '', when: params.get('when') || '', saved: params.get('saved') === '1',
-  };
-  var all = [];
-  var categories = [];
-
-  function syncUrl() {
-    var p = new URLSearchParams();
-    ['q', 'category', 'city', 'price', 'when'].forEach(function (k) { if (state[k]) p.set(k, state[k]); });
-    if (state.saved) p.set('saved', '1');
-    history.replaceState(null, '', location.pathname + (p.toString() ? '?' + p : ''));
-  }
-
-  function daysFromToday(iso) { return Math.round((O.localDate(iso) - O.localDate(O.todayIso())) / 86400000); }
+  var $ = function (id) { return document.getElementById(id); };
+  var state = { city: O.qs('city') || '', category: O.qs('category') || '', q: O.qs('q') || '', events: [], cities: [], categories: [] };
+  var keyOf = function (s) { return String(s).toLowerCase().trim().replace(/[\s-]+/g, '-'); };
 
   function matches(e) {
     var q = state.q.trim().toLowerCase();
-    if (q && [e.title, e.description, e.venue, e.city, e.category].concat(e.tags || []).join(' ').toLowerCase().indexOf(q) === -1) return false;
-    if (state.category && e.category !== state.category) return false;
-    if (state.city && e.city.toLowerCase() !== state.city.toLowerCase()) return false;
-    if (state.price) { var free = O.priceInfo(e).free; if ((state.price === 'free') !== free) return false; }
-    if (state.when === 'week' && daysFromToday(e.date) > 7) return false;
-    if (state.when === 'month' && daysFromToday(e.date) > 30) return false;
-    if (state.saved && !O.saved.has(e.id)) return false;
-    return true;
+    return (!state.city || keyOf(e.city) === keyOf(state.city) || e.cityKey === keyOf(state.city)) &&
+      (!state.category || e.category === state.category) &&
+      (!q || [e.title, e.city, e.venue, e.category, e.description].concat(e.tags || [], e.roles || []).join(' ').toLowerCase().indexOf(q) !== -1);
   }
 
-  function renderChips() {
-    els.categories.innerHTML = ['', ].concat(categories).map(function (c) {
-      return '<button class="chip" type="button" data-cat="' + O.esc(c) + '" aria-pressed="' + (state.category === c) + '">' + (c ? O.esc(c) : 'All Events') + '</button>';
-    }).join('');
+  function syncUrl() {
+    var p = new URLSearchParams();
+    if (state.city) p.set('city', state.city);
+    if (state.category) p.set('category', state.category);
+    if (state.q.trim()) p.set('q', state.q.trim());
+    var url = '/events' + (p.toString() ? '?' + p : '');
+    if (url !== location.pathname + location.search) history.replaceState(null, '', url);
   }
 
   function render() {
-    var list = all.filter(matches);
-    var active = ['city', 'price', 'when'].filter(function (k) { return state[k]; }).length + (state.saved ? 1 : 0);
-    els.count.hidden = !active;
-    els.count.textContent = active;
-    els.meta.textContent = list.length + ' event' + (list.length === 1 ? '' : 's') + (state.category ? ' in ' + state.category : '') + (state.city ? ' in ' + state.city : '') + (state.q ? ' for “' + state.q + '”' : '');
-    els.results.innerHTML = list.length
+    var list = state.events.filter(matches);
+    $('count-badge').textContent = O.plural(list.length, 'event');
+    var parts = [];
+    if (state.category) parts.push(state.category);
+    if (state.city) parts.push('in ' + state.city);
+    if (state.q.trim()) parts.push('matching “' + state.q.trim() + '”');
+    $('results-meta').textContent = parts.length ? 'Showing ' + O.plural(list.length, 'event') + ' ' + parts.join(' ') : 'All upcoming crew opportunities across India';
+    $('clear').hidden = !parts.length;
+    $('results').innerHTML = list.length
       ? list.map(function (e) { return O.eventCard(e); }).join('')
-      : '<div class="empty" style="grid-column:1/-1"><b>No events match</b>Try another search or clear the filters.<p style="margin-top:14px"><button class="btn btn-sm" type="button" id="clear-all">Clear filters</button></p></div>';
-    var clear = document.getElementById('clear-all');
-    if (clear) clear.addEventListener('click', resetAll);
+      : '<div class="empty" style="grid-column:1/-1"><b>No events match</b>Try another city or category, or clear the filters.' +
+        '<p style="margin-top:16px"><button class="btn btn-sm" type="button" data-clear>Clear filters</button></p></div>';
+    document.querySelectorAll('#city-chips .chip').forEach(function (c) {
+      c.setAttribute('aria-pressed', String(keyOf(c.getAttribute('data-city')) === keyOf(state.city)));
+    });
     syncUrl();
   }
 
-  function resetAll() {
-    state = { q: '', category: '', city: '', price: '', when: '', saved: false };
-    els.q.value = ''; els.city.value = ''; els.price.value = ''; els.when.value = ''; els.savedOnly.checked = false;
-    renderChips();
-    render();
+  function fillControls() {
+    $('f-city').innerHTML = '<option value="">All Cities</option>' + state.cities.map(function (c) {
+      return '<option value="' + O.esc(c.city) + '">' + O.esc(c.city) + ' (' + c.count + ')</option>';
+    }).join('');
+    $('f-cat').innerHTML = '<option value="">All Categories</option>' + state.categories.map(function (c) {
+      return '<option value="' + O.esc(c.name) + '">' + O.esc(c.name) + ' (' + c.count + ')</option>';
+    }).join('');
+    var known = state.cities.filter(function (c) { return keyOf(c.city) === keyOf(state.city) || c.cityKey === keyOf(state.city); })[0];
+    if (known) state.city = known.city;
+    $('f-city').value = state.city;
+    $('f-cat').value = state.category;
+    $('q').value = state.q;
+    $('city-chips').innerHTML = state.cities.map(function (c) {
+      return '<button class="chip" type="button" data-city="' + O.esc(c.city) + '" aria-pressed="false">' + O.icon('pin', 15) + O.esc(c.city) + ' · ' + O.plural(c.count, 'event') + '</button>';
+    }).join('');
   }
 
-  els.q.value = state.q;
-  els.price.value = state.price;
-  els.when.value = state.when;
-  els.savedOnly.checked = state.saved;
-  if (state.city || state.price || state.when || state.saved) { els.filters.hidden = false; els.toggle.setAttribute('aria-expanded', 'true'); }
+  function clearAll() { state.city = ''; state.category = ''; state.q = ''; fillControls(); render(); }
 
-  els.form.addEventListener('submit', function (ev) { ev.preventDefault(); state.q = els.q.value; render(); });
-  els.q.addEventListener('input', function () { state.q = els.q.value; render(); });
-  els.toggle.addEventListener('click', function () {
-    els.filters.hidden = !els.filters.hidden;
-    els.toggle.setAttribute('aria-expanded', String(!els.filters.hidden));
+  $('f-city').addEventListener('change', function () { state.city = this.value; render(); });
+  $('f-cat').addEventListener('change', function () { state.category = this.value; render(); });
+  $('q').addEventListener('input', function () { state.q = this.value; render(); });
+  $('filters').addEventListener('submit', function (ev) { ev.preventDefault(); });
+  $('clear').addEventListener('click', clearAll);
+  document.addEventListener('click', function (ev) {
+    if (ev.target.closest('[data-clear]')) clearAll();
+    var chip = ev.target.closest('#city-chips .chip');
+    if (chip) {
+      var city = chip.getAttribute('data-city');
+      state.city = keyOf(city) === keyOf(state.city) ? '' : city;
+      $('f-city').value = state.city;
+      render();
+    }
   });
-  els.city.addEventListener('change', function () { state.city = els.city.value; render(); });
-  els.price.addEventListener('change', function () { state.price = els.price.value; render(); });
-  els.when.addEventListener('change', function () { state.when = els.when.value; render(); });
-  els.savedOnly.addEventListener('change', function () { state.saved = els.savedOnly.checked; render(); });
-  els.reset.addEventListener('click', resetAll);
-  els.categories.addEventListener('click', function (ev) {
-    var chip = ev.target.closest('[data-cat]');
-    if (!chip) return;
-    state.category = chip.getAttribute('data-cat');
-    renderChips();
-    render();
-  });
-  document.addEventListener('osh:saved', function () { if (state.saved) render(); });
 
   O.api('/events?limit=200')
     .then(function (res) {
-      all = res.events;
-      categories = res.categories;
-      if (state.category && categories.indexOf(state.category) === -1) state.category = '';
-      els.city.innerHTML = '<option value="">All cities</option>' + res.cities.map(function (c) { return '<option>' + O.esc(c) + '</option>'; }).join('');
-      var cityMatch = res.cities.filter(function (c) { return c.toLowerCase() === state.city.toLowerCase(); })[0];
-      state.city = cityMatch || '';
-      els.city.value = state.city;
-      renderChips();
+      state.events = res.events;
+      state.cities = res.cities;
+      state.categories = res.categories;
+      fillControls();
       render();
     })
     .catch(function (err) {
-      els.results.innerHTML = '<div class="empty" style="grid-column:1/-1"><b>Couldn\'t load events</b>' + O.esc(err.message) + '</div>';
+      $('results').innerHTML = '<div class="empty" style="grid-column:1/-1"><b>Couldn\'t load events</b>' + O.esc(err.message) + '</div>';
     });
 })();

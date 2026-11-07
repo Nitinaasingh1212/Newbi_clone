@@ -1,6 +1,6 @@
 // My Profile: the volunteer dashboard. Next shift, clickable stats with a points breakdown,
-// tier ladder, events in the volunteer's city (apply / withdraw), applications with ratings,
-// tickets booked on this device, and the city leaderboard.
+// the Elite Crew ladder, events in the volunteer's city (send interest / withdraw), interest
+// responses with ratings, the city leaderboard, and editing city, skill and availability.
 (function () {
   'use strict';
   var O = window.OSH;
@@ -9,11 +9,10 @@
   var DISMISS_KEY = 'osh_dismissed';
   var reduceMotion = Boolean(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   var STATUS = {
-    applied: ['Waiting for approval', 'warn'], approved: ["You're on the team", 'ok'], rejected: ['Not selected this time', 'bad'],
+    applied: ['Interest sent', 'warn'], approved: ["You're on the crew", 'ok'], rejected: ['Not selected this time', 'bad'],
     withdrawn: ['Withdrawn', ''], completed: ['Completed', 'ok'], no_show: ['Marked as no-show', 'bad'],
   };
   var state = { tab: O.read(TAB_KEY) || 'events', showBreakdown: false, animated: false, welcome: O.qs('welcome') === '1' };
-  if (location.hash === '#tickets') state.tab = 'tickets';
   if (state.welcome) history.replaceState(null, '', '/profile');
 
   var token = O.auth.token();
@@ -26,7 +25,7 @@
     if (key && dismissed(key)) return '';
     return '<div class="notice ' + tone + (key ? ' dismissible' : '') + '">' + html + (key ? '<button class="x" type="button" data-dismiss="' + esc(key) + '" aria-label="Dismiss">' + O.icon('x', 16) + '</button>' : '') + '</div>';
   }
-  function busy(btn, text) { var t = btn.innerHTML; btn.disabled = true; btn.textContent = text; return function () { btn.disabled = false; btn.innerHTML = t; }; }
+  var busy = O.busy;
 
   function load() {
     return Promise.all([
@@ -35,7 +34,9 @@
       O.api('/volunteer/applications', { token: token }),
       O.api('/leaderboard', { token: token }),
       state.rules ? Promise.resolve({ rules: state.rules }) : O.api('/ranking/rules'),
+      O.options().catch(function () { return { departments: [], experienceLevels: [], availability: [] }; }),
     ]).then(function (r) {
+      state.opts = r[5];
       state.me = r[0].volunteer;
       state.readOnly = Boolean(r[0].demoReadOnly);
       state.events = r[1].events;
@@ -121,16 +122,16 @@
   }
 
   function kycNotice(me) {
-    if (me.kyc.status === 'verified') return notice('ok', '<b>Verified volunteer.</b> Your Aadhaar (' + esc(me.aadhaar) + ') is verified, so you can be approved for events.', 'kyc-' + me.id);
+    if (me.kyc.status === 'verified') return notice('ok', '<b>Verified volunteer.</b> Your Aadhaar (' + esc(me.aadhaar) + ') is verified, so you can be confirmed for crews.', 'kyc-' + me.id);
     if (me.kyc.status === 'rejected') return notice('bad', '<b>Your Aadhaar verification didn\'t go through.</b> ' + esc(me.kyc.note || 'Your details didn\'t match your card.') + ' Contact the coordination team to fix your details.');
-    return notice('warn', '<b>Aadhaar verification pending.</b> You can apply to events now. Bring your Aadhaar card (' + esc(me.aadhaar) + ') to your first event. The team verifies it before approving you.');
+    return notice('warn', '<b>Aadhaar verification pending.</b> You can send interest for events now. The OSH team verifies your Aadhaar (' + esc(me.aadhaar) + ') before confirming you for a crew.');
   }
 
   function demoNotice(me) {
     if (!me.demo) return '';
     return notice('', '<b>Demo account.</b> Everything here is sample data, refreshed daily. ' + (state.readOnly
-      ? 'It\'s view-only on this server, so applying and changing city are switched off. <a class="green" href="/volunteer" data-signup>Sign up with your own number</a> to try them.'
-      : 'Go ahead and apply to events; the demo resets each day.'), 'demo');
+      ? 'It\'s view-only on this server, so sending interest and editing your profile are switched off. <a href="/volunteer" data-signup>Sign up with your own number</a> to try them.'
+      : 'Go ahead and send interest for events; the demo resets each day.'), 'demo');
   }
 
   // ---- tabs ----------------------------------------------------------------------
@@ -142,19 +143,18 @@
       var status = '';
       var actions = '';
       if (!mine || mine.status === 'withdrawn') {
-        if (state.readOnly) actions = '<span class="badge">Applying is off in the view-only demo</span>';
+        if (state.readOnly) actions = '<span class="badge">Sending interest is off in the view-only demo</span>';
         else if (e.slotsLeft > 0) {
           actions = (e.roles.length ? '<select class="input" data-role-for="' + esc(e.id) + '" aria-label="Preferred role for ' + esc(e.title) + '"><option value="">Any role</option>' +
             e.roles.map(function (r) { return '<option>' + esc(r) + '</option>'; }).join('') + '</select>' : '') +
-            '<button class="btn btn-sm" type="button" data-apply="' + esc(e.id) + '">' + (mine ? 'Apply again' : 'Apply to volunteer') + '</button>';
-        } else actions = '<span class="badge">All volunteer spots filled</span>';
+            '<button class="btn btn-sm" type="button" data-apply="' + esc(e.id) + '">' + (mine ? 'I’m Interested again' : 'I’m Interested') + '</button>';
+        } else actions = '<span class="badge">All positions filled</span>';
       } else {
         var st = STATUS[mine.status] || [mine.status, ''];
         status = '<span class="badge ev-status ' + st[1] + '">' + esc(st[0]) + '</span>';
-        if ((mine.status === 'applied' || mine.status === 'approved') && !state.readOnly) actions = '<button class="linkbtn" type="button" data-withdraw="' + esc(e.id) + '">Withdraw application</button>';
+        if ((mine.status === 'applied' || mine.status === 'approved') && !state.readOnly) actions = '<button class="linkbtn" type="button" data-withdraw="' + esc(e.id) + '">Withdraw my interest</button>';
       }
-      var extra = '<p class="ev-meta">' + O.icon('users', 15) + e.slotsLeft + ' of ' + e.volunteersNeeded + ' volunteer spots open</p>' +
-        (actions ? '<div class="vol-actions">' + actions + '</div>' : '') + '<p class="err" data-event-err="' + esc(e.id) + '"></p>';
+      var extra = (actions ? '<div class="vol-actions">' + actions + '</div>' : '') + '<p class="err" data-event-err="' + esc(e.id) + '"></p>';
       return O.eventCard(e, { status: status, extra: extra, hideFoot: true });
     }).join('') + '</div>';
   }
@@ -165,32 +165,19 @@
   }
 
   function applicationsPanel() {
-    if (!state.applications.length) return '<div class="empty"><b>No applications yet</b>Apply to an event in ' + esc(state.me.city) + ' and track it here.</div>';
+    if (!state.applications.length) return '<div class="empty"><b>No interest sent yet</b>Tap “I’m Interested” on an event in ' + esc(state.me.city) + ' and track it here.</div>';
     return state.applications.map(function (a) {
       var st = STATUS[a.status] || [a.status, ''];
       var e = a.event || {};
       return '<article class="card app-item">' + thumb(e) + '<div>' +
         '<h3><a href="/events/' + encodeURIComponent(e.id || '') + '" style="text-decoration:none">' + esc(e.title || 'Event') + '</a></h3>' +
-        '<p class="ev-meta" style="margin-top:4px">' + O.icon('calendar', 15) + (e.date ? esc(O.prettyDate(e.date)) : '') + ' · ' + esc(e.venue || '') + (e.city ? ', ' + esc(e.city) : '') + '</p>' +
-        '<div class="row"><span class="badge ' + st[1] + '">' + esc(st[0]) + '</span>' + (a.preferredRole ? '<span class="tag">' + esc(a.preferredRole) + '</span>' : '') +
+        '<p class="ev-meta" style="margin-top:4px">' + O.icon('calendar', 15) + (e.date ? esc(O.prettyDate(e.date)) : '') + (e.city ? ' · ' + esc(O.placeText(e)) : '') + '</p>' +
+        '<div class="row"><span class="badge ' + st[1] + '">' + esc(st[0]) + '</span>' + (a.preferredRole ? '<span class="tag">' + esc(a.preferredRole) + '</span>' : '') + (e.category ? '<span class="tag">' + esc(e.category) + '</span>' : '') +
         (e.status === 'cancelled' ? '<span class="badge bad">Event cancelled</span>' : '') + '</div>' +
         (a.decisionNote ? '<p class="notice" style="margin-top:10px">' + esc(a.decisionNote) + '</p>' : '') +
         (a.review && a.review.rating ? '<p style="margin-top:10px"><span class="stars" aria-label="Rated ' + a.review.rating + ' out of 5">' + '★'.repeat(a.review.rating) + '☆'.repeat(5 - a.review.rating) + '</span>' +
           (a.review.comment ? ' <span class="muted">“' + esc(a.review.comment) + '”</span>' : '') + '</p>' : '') +
         '</div></article>';
-    }).join('');
-  }
-
-  function ticketsPanel() {
-    var list = O.tickets.list();
-    if (!list.length) return '<div class="empty"><b>No tickets on this device</b>Tickets you book show up here.<p style="margin-top:14px"><a class="btn btn-sm" href="/events">Find an event</a></p></div>';
-    return list.map(function (x) {
-      var b = x.booking, e = x.event || {};
-      return '<article class="card app-item">' + thumb(e) + '<div><h3><a href="/bookings/' + encodeURIComponent(b.id) + '" style="text-decoration:none">' + esc(e.title || 'Event') + '</a></h3>' +
-        '<p class="ev-meta" style="margin-top:4px">' + O.icon('calendar', 15) + (e.date ? esc(O.prettyDate(e.date)) : '') + ' · ' + esc(e.venue || '') + '</p>' +
-        '<div class="row"><span class="badge ok">' + O.icon('ticket', 14) + esc(b.ticket.name) + '</span><span class="code" style="font-weight:700">' + esc(b.code) + '</span>' +
-        '<span class="muted" style="font-size:14px">' + (b.amount ? O.money(b.amount) : 'Free') + '</span></div>' +
-        '<p style="margin-top:10px"><a class="green" style="font-weight:600" href="/bookings/' + encodeURIComponent(b.id) + '">View ticket →</a></p></div></article>';
     }).join('');
   }
 
@@ -211,7 +198,7 @@
 
   function renderPanel() {
     var panel = document.getElementById('ppanel');
-    panel.innerHTML = state.tab === 'applications' ? applicationsPanel() : state.tab === 'tickets' ? ticketsPanel() : state.tab === 'leaderboard' ? leaderboardPanel() : eventsPanel();
+    panel.innerHTML = state.tab === 'applications' ? applicationsPanel() : state.tab === 'leaderboard' ? leaderboardPanel() : eventsPanel();
     panel.querySelectorAll('[data-apply]').forEach(function (b) { b.addEventListener('click', function () { apply(b); }); });
     panel.querySelectorAll('[data-withdraw]').forEach(function (b) { b.addEventListener('click', function () { withdraw(b); }); });
   }
@@ -219,7 +206,7 @@
   function flash(el) { if (!el) return; el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
   function openTab(id, scroll) {
     state.tab = id;
-    O.write(TAB_KEY, id === 'tickets' ? 'events' : id);
+    O.write(TAB_KEY, id);
     root.querySelectorAll('.ptab').forEach(function (t) { t.setAttribute('aria-selected', String(t.getAttribute('data-tab') === id)); });
     renderPanel();
     if (scroll) document.querySelector('.ptabs').scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
@@ -262,28 +249,35 @@
     document.title = me.name + ' | OSH Entertainment';
     var welcome = state.welcome;
     state.welcome = false;
-    var counts = { events: state.events.length, applications: state.applications.length, tickets: O.tickets.list().length };
+    var counts = { events: state.events.length, applications: state.applications.length };
+    var details = [me.department, me.experience, me.availability].filter(Boolean);
     root.innerHTML =
       '<header class="prof-head"><div class="prof-id"><span class="avatar-lg" aria-hidden="true">' + esc(me.name.charAt(0).toUpperCase()) + '</span>' +
       '<div><span class="eyebrow">Volunteer profile</span><h1>Hi, ' + esc(me.name.split(' ')[0]) + '</h1>' +
-      '<p>' + O.icon('pin', 15) + ' ' + esc(me.city) + ' · ' + esc(me.phone.replace(/^\+91(\d{5})(\d{5})$/, '+91 $1 $2')) + '</p></div></div>' +
-      '<div style="display:flex;flex-wrap:wrap;gap:10px">' + (state.readOnly ? '' : '<button class="btn btn-outline btn-sm" type="button" id="change-city">' + O.icon('pin', 16) + 'Change city</button>') +
+      '<p>' + O.icon('pin', 15) + ' ' + esc(me.city) + ' · ' + esc(O.prettyPhone(me.phone)) + '</p>' +
+      (details.length ? '<p>' + O.icon('award', 15) + ' ' + esc(details.join(' · ')) + '</p>' : '') + '</div></div>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:10px">' + (state.readOnly ? '' : '<button class="btn btn-outline btn-sm" type="button" id="change-city">' + O.icon('pin', 16) + 'Edit profile</button>') +
       '<button class="btn btn-ghost btn-sm" type="button" id="sign-out">' + O.icon('logOut', 16) + 'Sign out</button></div></header>' +
-      '<form class="card panel-card" id="f-city" hidden novalidate><label class="field-label" for="new-city">Your city</label>' +
-      '<div class="input-row" style="margin-top:10px;flex-wrap:wrap"><input class="input" id="new-city" list="city-options" value="' + esc(me.city) + '" maxlength="60" style="flex:1 1 220px">' +
-      '<button class="btn btn-sm" type="submit">Save</button><button class="btn btn-ghost btn-sm" type="button" id="city-cancel">Cancel</button></div><p class="err" id="city-err"></p></form>' +
-      '<div class="prof-notices">' + (welcome ? notice('ok', '<b>You\'re in!</b> Your volunteer profile is ready. Apply to any event below.') : '') + demoNotice(me) + kycNotice(me) + '</div>' +
+      '<form class="card panel-card" id="f-city" hidden novalidate><div class="panel-head"><h3>Edit profile</h3></div>' +
+      '<p class="hint" style="margin-top:4px">Your city decides which events you see. Changing it moves you to that city\'s events and leaderboard.</p>' +
+      '<div class="grid-2"><div class="field"><label for="new-city">City</label><input class="input" id="new-city" list="city-options" value="' + esc(me.city) + '" maxlength="60"></div>' +
+      '<div class="field"><label for="new-dept">Skill / department</label><select class="input" id="new-dept">' + O.selectOptions(state.opts.departments, 'Choose skill', me.department) + '</select></div></div>' +
+      '<div class="grid-2"><div class="field"><label for="new-exp">Experience</label><select class="input" id="new-exp">' + O.selectOptions(state.opts.experienceLevels, 'Choose', me.experience) + '</select></div>' +
+      '<div class="field"><label for="new-avail">Availability</label><select class="input" id="new-avail">' + O.selectOptions(state.opts.availability, 'Choose', me.availability) + '</select></div></div>' +
+      '<p class="err" id="city-err" style="margin-top:10px"></p>' +
+      '<p style="display:flex;gap:10px;margin-top:14px"><button class="btn btn-sm" type="submit">Save</button><button class="btn btn-ghost btn-sm" type="button" id="city-cancel">Cancel</button></p></form>' +
+      '<div class="prof-notices">' + (welcome ? notice('ok', '<b>You\'re in!</b> Your volunteer profile is ready. Tap “I’m Interested” on any event below.') : '') + demoNotice(me) + kycNotice(me) + '</div>' +
       nextShift() +
       '<div class="pstats">' + [
         { id: 'points', icon: 'star', value: s.points, count: s.points, label: 'Points', hint: 'See breakdown', toggle: true },
         { id: 'tier', icon: 'award', value: s.tier, label: 'Tier', hint: 'How tiers work', toggle: true },
-        { id: 'rank', icon: 'trophy', value: rank ? '#' + rank : '—', count: rank || null, prefix: '#', label: rank ? 'Rank in ' + esc(me.city) + ' of ' + me.standing.city.rankedVolunteers : 'Rank after your first event', hint: 'Open leaderboard' },
-        { id: 'events', icon: 'calendarCheck', value: s.completedEvents, count: s.completedEvents, label: 'Events completed', hint: 'View history' },
+        { id: 'rank', icon: 'trophy', value: rank ? '#' + rank : '—', count: rank || null, prefix: '#', label: rank ? 'Rank in ' + esc(me.city) + ' of ' + me.standing.city.rankedVolunteers : 'Rank after your first rated event', hint: 'Open leaderboard' },
+        { id: 'events', icon: 'calendarCheck', value: s.completedEvents, count: s.completedEvents, label: 'Events completed', hint: 'View my interest' },
         { id: 'rating', icon: 'sparkles', value: s.averageRating != null ? s.averageRating.toFixed(1) + '★' : '—', count: s.averageRating, decimals: 1, suffix: '★', label: 'Average rating', hint: 'See your ratings' },
       ].map(stat).join('') + '</div>' +
       breakdown(s) + ladder(s) +
       '<div class="ptabs" role="tablist" aria-label="Profile sections">' +
-      [['events', 'Events in ' + esc(me.city) + ' (' + counts.events + ')'], ['applications', 'My applications (' + counts.applications + ')'], ['tickets', 'My tickets (' + counts.tickets + ')'], ['leaderboard', 'Leaderboard']]
+      [['events', 'Events in ' + esc(me.city) + ' (' + counts.events + ')'], ['applications', 'My interest (' + counts.applications + ')'], ['leaderboard', 'Leaderboard']]
         .map(function (t) { return '<button class="ptab" type="button" role="tab" data-tab="' + t[0] + '" aria-selected="' + (state.tab === t[0]) + '">' + t[1] + '</button>'; }).join('') +
       '</div><div class="ppanel" id="ppanel" role="tabpanel"></div>';
     renderPanel();
@@ -319,9 +313,15 @@
       ev.preventDefault();
       var city = document.getElementById('new-city').value.trim();
       if (city.length < 2) { document.getElementById('city-err').textContent = 'Enter a city name.'; return; }
+      var patch = { city: city };
+      [['department', 'new-dept'], ['experience', 'new-exp'], ['availability', 'new-avail']].forEach(function (f) {
+        var v = document.getElementById(f[1]).value;
+        if (v) patch[f[0]] = v;
+      });
+      var moved = city.toLowerCase() !== state.me.city.toLowerCase();
       var done = busy(cityForm.querySelector('button[type=submit]'), 'Saving…');
-      O.api('/volunteer/me', { method: 'PATCH', token: token, body: { city: city } })
-        .then(function (res) { O.toast('Now showing events in ' + res.volunteer.city); state.tab = 'events'; return load(); })
+      O.api('/volunteer/me', { method: 'PATCH', token: token, body: patch })
+        .then(function (res) { O.toast(moved ? 'Now showing events in ' + res.volunteer.city : 'Profile updated'); state.tab = 'events'; return load(); })
         .catch(function (err) { done(); document.getElementById('city-err').textContent = err.message; });
     });
   }
@@ -330,17 +330,17 @@
   function apply(btn) {
     var id = btn.getAttribute('data-apply');
     var role = document.querySelector('[data-role-for="' + id + '"]');
-    var done = busy(btn, 'Applying…');
+    var done = busy(btn, 'Sending…');
     O.api('/volunteer/events/' + encodeURIComponent(id) + '/apply', { method: 'POST', token: token, body: role && role.value ? { preferredRole: role.value } : {} })
-      .then(function (res) { O.toast('Applied to ' + res.application.event.title); return load(); })
+      .then(function (res) { O.toast('Interest sent for ' + res.application.event.title); return load(); })
       .catch(function (err) { done(); eventError(id, err.message); });
   }
   function withdraw(btn) {
     var id = btn.getAttribute('data-withdraw');
-    if (!window.confirm('Withdraw your application for this event?')) return;
+    if (!window.confirm('Withdraw your interest for this event?')) return;
     var done = busy(btn, 'Withdrawing…');
     O.api('/volunteer/events/' + encodeURIComponent(id) + '/withdraw', { method: 'POST', token: token })
-      .then(function () { O.toast('Application withdrawn'); return load(); })
+      .then(function () { O.toast('Interest withdrawn'); return load(); })
       .catch(function (err) { done(); eventError(id, err.message); });
   }
 

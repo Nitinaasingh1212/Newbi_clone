@@ -1,4 +1,4 @@
-// End-to-end tests for the volunteer API, run against an in-memory store with a fake clock.
+// End-to-end tests for the OSH API, run against in-memory stores with a fake clock.
 // Run with: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -63,7 +63,10 @@ const profile = (overrides = {}) => ({
   dateOfBirth: '2000-04-15',
   gender: 'male',
   city: 'New Delhi',
-  skills: ['crowd management', 'ticketing'],
+  department: 'Crowd management',
+  experience: 'Fresher',
+  availability: 'Event based',
+  skills: ['crowd management', 'guest relations'],
   emergencyContact: { name: 'Sunita Sharma', phone: '9811111111', relation: 'mother' },
   ...overrides,
 });
@@ -94,8 +97,10 @@ test('ranking: points, rating bonus, no-show penalty and tiers', () => {
   assert.equal(computeStats([{ status: 'no_show' }]).points, 0, 'points never go below zero');
   const veteran = computeStats(Array.from({ length: 8 }, () => done(5)));
   assert.equal(veteran.points, 160);
-  assert.equal(veteran.tier, 'Gold');
-  assert.deepEqual(veteran.nextTier, { name: 'Platinum', pointsNeeded: 140 });
+  assert.equal(veteran.tier, 'Experienced');
+  assert.deepEqual(veteran.nextTier, { name: '5-Star Elite', pointsNeeded: 140 });
+  assert.equal(computeStats([]).tier, 'New Joiner');
+  assert.equal(computeStats([done(5), done(5), done(4)]).tier, 'Trained');
   const mixed = computeStats([done(5), done(4), { status: 'no_show' }, { status: 'applied' }]);
   assert.equal(mixed.points, 20 + 15 - 15);
   assert.equal(mixed.averageRating, 4.5);
@@ -138,12 +143,16 @@ test('OTP sign-up, registration rules and login', async () => {
   assert.equal(minor.error.code, 'too_young');
   const typo = await call('POST', '/auth/register', { token: regToken, body: { ...profile(), aadhar: '1' } });
   assert.equal(typo.error.code, 'unknown_field');
+  const badDepartment = await call('POST', '/auth/register', { token: regToken, body: profile({ department: 'Juggling' }) });
+  assert.equal(badDepartment.error.code, 'invalid_field');
+  assert.ok(badDepartment.error.details.allowed.includes('Crowd management'));
 
   const reg = await call('POST', '/auth/register', { token: regToken, body: profile({ aadhaarNumber: '2345 6789 012' + aadhaar('23456789012').slice(-1) }) });
   assert.equal(reg.status, 201);
   assert.equal(reg.volunteer.city, 'Delhi');
   assert.equal(reg.volunteer.aadhaar, `XXXX XXXX ${aadhaar('23456789012').slice(-4)}`);
   assert.equal(reg.volunteer.kyc.status, 'pending');
+  assert.deepEqual([reg.volunteer.department, reg.volunteer.experience, reg.volunteer.availability], ['Crowd management', 'Fresher', 'Event based']);
   assert.ok(!JSON.stringify(reg).includes(aadhaar('23456789012')), 'the full Aadhaar number is never returned');
 
   const twice = await call('POST', '/auth/register', { token: regToken, body: profile() });
@@ -377,7 +386,7 @@ test('demo login: fixed OTP and the same populated dashboard on every server cop
   assert.deepEqual(meA.volunteer, meB.volunteer);
   assert.equal(meA.demoReadOnly, true, 'memory storage is not kept, so the demo is view-only');
   const s = meA.volunteer.stats;
-  assert.deepEqual([s.points, s.tier, s.completedEvents, s.averageRating], [55, 'Silver', 3, 4.7]);
+  assert.deepEqual([s.points, s.tier, s.completedEvents, s.averageRating], [55, 'Trained', 3, 4.7]);
   assert.deepEqual(meA.volunteer.standing.city, { name: 'Delhi', rank: 2, rankedVolunteers: 5 });
   assert.equal(meA.volunteer.kyc.status, 'verified');
 
@@ -385,18 +394,18 @@ test('demo login: fixed OTP and the same populated dashboard on every server cop
   const eventsB = await b('GET', '/volunteer/events', { token: login.token });
   assert.deepEqual(eventsA.events, eventsB.events);
   assert.deepEqual(eventsA.events.map((e) => [e.title, e.date, e.myApplication?.status ?? null, e.slotsLeft]), [
-    ['Diwali Night Market', '2026-11-09', 'approved', 18],
-    ['Dandiya Night', '2026-11-12', null, 15],
-    ['Event Volunteering Workshop', '2026-11-14', null, 4],
-    ['Campus Fest Pro Night', '2026-11-16', null, 30],
+    ['Corporate Annual Awards', '2026-11-19', 'approved', 16],
+    ['New Year Private Gala', '2026-12-30', null, 20],
   ]);
-  assert.equal(eventsA.events[0].image, '/volunteer/img/events/diwali.jpg');
+  assert.equal(eventsA.events[0].image, '/volunteer/img/events/comedy.jpg');
   assert.match(eventsA.events[0].imageCredit, /^Photo: .+, CC BY/);
   assert.match(eventsA.events[0].imageCreditUrl, /^https:\/\/commons\.wikimedia\.org\/wiki\/File:/);
+  assert.equal(eventsA.events[0].demo, true);
+  assert.equal(meA.volunteer.department, 'Crowd management');
 
   const history = await b('GET', '/volunteer/applications', { token: login.token });
   assert.deepEqual(history.applications.map((x) => [x.event.title, x.status, x.review?.rating ?? null]), [
-    ['Diwali Night Market', 'approved', null],
+    ['Corporate Annual Awards', 'approved', null],
     ['Sneaker Drop Pop-up', 'completed', 5],
     ['College Fest: Spring Edition', 'completed', 4],
     ['Holi Colour Fest', 'completed', 5],
@@ -416,76 +425,134 @@ test('demo login: fixed OTP and the same populated dashboard on every server cop
 
   // Real sign-ups still see the demo events in their city.
   const cities = (await b('GET', '/cities')).cities;
-  assert.ok(cities.some((c) => c.city === 'Delhi' && c.upcomingEvents === 4));
+  assert.ok(cities.some((c) => c.city === 'Delhi' && c.upcomingEvents === 2));
 
   // The next day the demo is rewritten with fresh dates.
   setDate('2026-11-07');
   const tomorrow = await a('GET', '/volunteer/events', { token: login.token });
-  assert.equal(tomorrow.events[0].date, '2026-11-10');
+  assert.equal(tomorrow.events[0].date, '2026-11-20');
 });
 
-test('public site: event listing, filters, ticket booking and organiser enquiries', async () => {
+test('public site: crew listings, filters, network stats and Star Volunteers', async () => {
   const { a, b } = demoCopies();
 
   const all = await a('GET', '/events');
   assert.equal(all.status, 200);
-  assert.equal(all.total, 14, 'every upcoming demo event, all cities');
-  assert.deepEqual(all.categories, ['Cultural', 'Technical', 'Workshop', 'Sports', 'Fest', 'Concert', 'Comedy', 'Activation']);
-  assert.ok(all.cities.includes('Delhi') && all.cities.includes('Bengaluru'));
+  assert.equal(all.total, 12, 'every upcoming demo event, all cities');
+  assert.deepEqual(all.categories, [
+    { name: 'Music & Concerts', count: 4 },
+    { name: 'Corporate Events', count: 3 },
+    { name: 'College Festivals', count: 3 },
+    { name: 'Private Events', count: 2 },
+  ]);
+  assert.deepEqual(all.cities.slice(0, 3).map((c) => [c.city, c.count]), [['Delhi', 2], ['Lucknow', 2], ['Mumbai', 2]]);
+  assert.equal(all.cities.length, 9);
+  assert.ok(all.cities.some((c) => c.city === 'Punjab' && c.count === 1), 'network regions work like cities');
   assert.ok(all.events.every((e, i, list) => i === 0 || list[i - 1].date <= e.date), 'soonest first');
-  assert.ok(all.events.every((e) => e.image && e.category && e.tickets.length));
+  assert.ok(all.events.every((e) => e.image && e.category && e.roles.length && e.slotsLeft > 0 && e.demo === true));
+  assert.ok(all.events.every((e) => !('tickets' in e) && !('priceFrom' in e)), 'no ticketing');
+  assert.equal(all.events[0].title, 'DJ Night – Live Concert');
 
-  const tech = await a('GET', '/events', { query: { category: 'Technical' } });
-  assert.deepEqual(tech.events.map((e) => e.title), ['Tech Expo 2026', 'Code Rush Hackathon']);
-  assert.deepEqual((await a('GET', '/events', { query: { q: 'garba' } })).events.map((e) => e.title), ['Dandiya Night']);
-  assert.equal((await a('GET', '/events', { query: { city: 'Bombay' } })).events.length, 3);
+  const corporate = await a('GET', '/events', { query: { category: 'Corporate Events' } });
+  assert.deepEqual(corporate.events.map((e) => e.title), ['Corporate Annual Awards', 'Brand Leadership Summit', 'Corporate Product Launch']);
+  assert.deepEqual((await a('GET', '/events', { query: { q: 'sangeet' } })).events.map((e) => e.title), ['Luxury Wedding Celebration']);
+  assert.deepEqual((await a('GET', '/events', { query: { q: 'front-of-house' } })).events.map((e) => e.title), ['Winter Live Tour'], 'roles are searchable');
+  assert.equal((await a('GET', '/events', { query: { city: 'Bombay' } })).events.length, 2);
+  assert.deepEqual((await a('GET', '/events', { query: { city: 'Gurgaon' } })).events.map((e) => e.title), ['Grand Music Festival']);
   assert.equal((await a('GET', '/events', { query: { category: 'Opera' } })).status, 400);
 
-  const detail = await b('GET', '/events/evt_demo_techfest');
-  assert.deepEqual(detail.event.tickets.map((x) => [x.id, x.price]), [['general-pass', 0], ['student-pass', 99], ['premium-pass', 299]]);
-  assert.deepEqual(detail.event.tags, ['Technology', 'Innovation', 'Exhibition']);
-  assert.deepEqual(detail.event.highlights, ['Live Demos', 'Expert Talks', 'Startup Zone', 'Networking']);
-  assert.equal(detail.event.priceFrom, 0);
-  assert.equal(detail.event.bookable, true);
-  assert.equal((await b('GET', '/events/evt_demo_holi')).event.bookable, false, 'past events cannot be booked');
+  const detail = await b('GET', '/events/evt_demo_summit');
+  assert.deepEqual(detail.event.roles, ['Delegate support', 'Registration desk', 'Hall management']);
+  assert.deepEqual(detail.event.highlights, ['Keynote Talks', 'Panel Discussions', 'Networking Lunch', 'Expo Booths']);
+  assert.deepEqual([detail.event.volunteersNeeded, detail.event.slotsLeft], [14, 14]);
+  assert.equal((await a('POST', '/events/evt_demo_summit/bookings', { body: {} })).status, 404, 'ticket booking is gone');
 
-  const attendee = { name: 'Nitin Singh', email: 'nitin@example.com', phone: '98765 43210' };
-  const booking = await a('POST', '/events/evt_demo_techfest/bookings', { body: { ticketId: 'premium-pass', ...attendee } });
-  assert.equal(booking.status, 201);
-  assert.match(booking.booking.code, /^OSH-[A-HJ-NP-Z2-9]{6}$/);
-  assert.deepEqual([booking.booking.amount, booking.booking.payment, booking.booking.status], [299, 'simulated', 'confirmed']);
-  assert.equal(booking.booking.attendee.phone, '+919876543210');
-  assert.equal(booking.event.title, 'Tech Expo 2026');
-  const free = await a('POST', '/events/evt_demo_techfest/bookings', { body: { ticketId: 'general-pass', ...attendee } });
-  assert.equal(free.booking.payment, 'free');
-  assert.equal((await a('GET', `/bookings/${booking.booking.id}`)).booking.code, booking.booking.code);
+  const stats = await a('GET', '/stats');
+  assert.deepEqual(
+    [stats.upcomingEvents, stats.activeCities, stats.volunteerPositions, stats.interestResponses, stats.volunteers, stats.verifiedVendors],
+    [12, 9, 292, 3, 5, 0],
+  );
 
-  assert.equal((await a('POST', '/events/evt_demo_techfest/bookings', { body: { ticketId: 'nope', ...attendee } })).error.code, 'invalid_ticket');
-  assert.equal((await a('POST', '/events/evt_demo_techfest/bookings', { body: { ticketId: 'general-pass', ...attendee, email: '' } })).error.code, 'missing_field');
-  assert.equal((await a('POST', '/events/evt_demo_holi/bookings', { body: { ticketId: 'x', ...attendee } })).error.code, 'bookings_closed');
+  const stars = await b('GET', '/star-volunteers', { query: { limit: '3' } });
+  assert.deepEqual(stars.volunteers.map((v) => [v.rank, v.name, v.tier, v.points]), [
+    [1, 'Arjun M.', 'Trained', 60], [2, 'Riya K.', 'Trained', 55], [3, 'Sana K.', 'New Joiner', 35],
+  ]);
+  assert.ok(stars.volunteers.every((v) => !('phone' in v) && !('id' in v)), 'no contact details or ids in public lists');
 
-  const enquiry = await a('POST', '/organize/enquiries', {
-    body: { name: 'Priya Sharma', email: 'priya@college.edu', phone: '9123456780', organization: 'XYZ College', eventType: 'College fest', city: 'Lucknow', audience: '1,000 to 5,000', message: 'Two-day fest in March.' },
-  });
-  assert.equal(enquiry.status, 201);
-  assert.match(enquiry.enquiry.id, /^enq_/);
-  assert.equal((await a('POST', '/organize/enquiries', { body: { name: 'X', email: 'x@y.z', phone: '9123456780', eventType: 'Wedding', message: 'Hi' } })).status, 400);
+  const options = await a('GET', '/options');
+  assert.deepEqual(options.categories, all.categories.map((c) => c.name));
+  assert.equal(options.networkCities[0], 'Lucknow');
+  assert.ok(options.departments.includes('Crowd management') && options.vendorCategories.includes('Sound & lights'));
+});
 
-  const admin = await a('POST', '/admin/login', { body: { apiKey: 'newbi-admin-2026', name: 'Ops' } });
-  const adminBookings = await a('GET', '/admin/events/evt_demo_techfest/bookings', { token: admin.token });
-  assert.equal(adminBookings.total, 2);
-  assert.deepEqual(adminBookings.byTicket.map((x) => [x.ticket, x.bookings, x.amount]).sort(), [['General Pass', 1, 0], ['Premium Pass', 1, 299]]);
-  const enquiries = await a('GET', '/admin/enquiries', { token: admin.token });
-  assert.equal(enquiries.enquiries[0].organization, 'XYZ College');
+test('vendor registration, feedback and the admin dashboard', async () => {
+  const { call, adminToken } = setup();
+  const vendor = { companyName: 'Sonic Sound Co.', contactPerson: 'Ravi Kumar', phone: '98765 43210', city: 'Lucknow', category: 'Sound & lights', gstin: '09aaach 7409r1zz', services: 'Line arrays, DJ consoles and a lighting rig for 5,000 people.' };
+  const created = await call('POST', '/vendors', { body: vendor });
+  assert.equal(created.status, 201, JSON.stringify(created));
+  assert.match(created.vendor.id, /^ven_/);
+  assert.equal(created.vendor.status, 'pending');
+  assert.equal((await call('POST', '/vendors', { body: vendor })).error.code, 'vendor_exists', 'one registration per mobile number');
+  assert.equal((await call('POST', '/vendors', { body: { ...vendor, phone: '9123456780', gstin: '12345' } })).error.code, 'invalid_gstin');
+  assert.equal((await call('POST', '/vendors', { body: { ...vendor, phone: '9123456780', category: 'Fireworks' } })).status, 400);
+  assert.equal((await call('POST', '/vendors', { body: { ...vendor, phone: '9123456780', companyName: '' } })).error.code, 'missing_field');
+  const noGst = await call('POST', '/vendors', { body: { ...vendor, phone: '9123456780', gstin: '', city: 'Gurgaon' } });
+  assert.equal(noGst.status, 201);
+  assert.equal(noGst.vendor.city, 'Gurugram');
 
-  // Admins can set the new event fields.
-  const created = await a('POST', '/admin/events', {
-    token: admin.token,
-    body: { title: 'Robotics Workshop', city: 'Lucknow', venue: 'Main Hall', date: '2026-11-20', volunteersNeeded: 5, category: 'Workshop', tags: ['Robotics'], highlights: ['Hands-on Kits'], tickets: [{ name: 'Student', price: 99 }, { name: 'Student', price: 149 }] },
-  });
-  assert.equal(created.status, 201);
-  assert.deepEqual(created.event.tickets.map((x) => x.id), ['student', 'student-x'], 'duplicate ticket names get distinct ids');
-  assert.equal((await a('POST', '/admin/events', { token: admin.token, body: { title: 'X', city: 'Delhi', venue: 'Y', date: '2026-11-20', volunteersNeeded: 1, tickets: [{ name: 'Free' }] } })).status, 400);
+  const fb = await call('POST', '/feedback', { body: { category: 'Work environment', message: 'Drinking water ran out at gate 3 by 7 pm.' } });
+  assert.equal(fb.status, 201);
+  assert.match(fb.feedback.id, /^fbk_/);
+  await call('POST', '/feedback', { body: { category: 'Suggestion', name: 'Sana', message: 'A crew WhatsApp group per event would help.' } });
+  assert.equal((await call('POST', '/feedback', { body: { category: 'Suggestion', message: 'ok' } })).status, 400);
+  assert.equal((await call('POST', '/feedback', { body: { category: 'Gossip', message: 'Something long enough.' } })).status, 400);
+  assert.equal((await call('GET', '/admin/feedback')).status, 401, 'only admins can read feedback');
+
+  const admin = await adminToken();
+  const overview = await call('GET', '/admin/overview', { token: admin });
+  assert.deepEqual(overview.vendors, { total: 2, pending: 2 });
+  assert.deepEqual(overview.feedback, { total: 2, new: 2 });
+  assert.deepEqual(overview.events, { listed: 0, upcoming: 0 });
+
+  const vendors = await call('GET', '/admin/vendors', { token: admin, query: { city: 'Lucknow' } });
+  assert.equal(vendors.total, 1);
+  assert.equal(vendors.vendors[0].gstin, '09AAACH7409R1ZZ');
+  const verified = await call('PATCH', `/admin/vendors/${created.vendor.id}`, { token: admin, body: { status: 'verified', note: 'GST checked' } });
+  assert.deepEqual([verified.vendor.status, verified.vendor.reviewedBy], ['verified', 'Priya (Ops)']);
+  assert.equal((await call('GET', '/stats')).verifiedVendors, 1);
+
+  const inbox = await call('GET', '/admin/feedback', { token: admin });
+  assert.deepEqual(inbox.feedback.map((f) => [f.category, f.name]).sort(), [['Suggestion', 'Sana'], ['Work environment', null]]);
+  const resolved = await call('PATCH', `/admin/feedback/${fb.feedback.id}`, { token: admin, body: { status: 'resolved' } });
+  assert.equal(resolved.feedback.resolvedBy, 'Priya (Ops)');
+  assert.equal((await call('GET', '/admin/feedback', { token: admin, query: { status: 'new' } })).total, 1);
+
+  // Events have no ticket types any more; the new categories are accepted.
+  const withTickets = await call('POST', '/admin/events', { token: admin, body: { title: 'X', city: 'Delhi', venue: 'Y', date: '2026-11-20', volunteersNeeded: 1, tickets: [] } });
+  assert.equal(withTickets.error.code, 'unknown_field');
+  const gala = await call('POST', '/admin/events', { token: admin, body: { title: 'Sangeet Night', city: 'Jaipur', venue: 'Rambagh', date: '2026-11-20', volunteersNeeded: 6, category: 'Private Events', roles: ['Guest hospitality'] } });
+  assert.equal(gala.status, 201);
+  assert.equal(gala.event.category, 'Private Events');
+});
+
+test('demo events from older versions are cleaned up', async () => {
+  const store = createMemoryStore();
+  const old = (id) => ({ id, title: 'Old ' + id, city: 'Hyderabad', cityKey: 'hyderabad', venue: 'X', date: '2026-11-10', roles: [], volunteersNeeded: 5, status: 'open', createdBy: 'Demo data', createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-01T00:00:00Z' });
+  await store.hset('events', 'evt_demo_edm', JSON.stringify(old('evt_demo_edm')));
+  await store.hset('events', 'evt_demo_hackathon', JSON.stringify(old('evt_demo_hackathon')));
+  const app = (id, eventId, volunteerId) => ({ id, eventId, volunteerId, status: 'applied', appliedAt: '2026-10-02T00:00:00Z' });
+  await store.hset('applications', 'app_demo_riya_edm', JSON.stringify(app('app_demo_riya_edm', 'evt_demo_edm', 'vol_demo_riya')));
+  await store.hset('idx:application', 'evt_demo_edm:vol_demo_riya', 'app_demo_riya_edm');
+  await store.hset('applications', 'app_real', JSON.stringify(app('app_real', 'evt_demo_hackathon', 'vol_real')));
+
+  const { a } = demoCopies({ store });
+  assert.equal((await a('GET', '/cities')).status, 200);
+  assert.equal(await store.hget('events', 'evt_demo_edm'), null, 'an unused old demo event is removed');
+  assert.equal(await store.hget('applications', 'app_demo_riya_edm'), null);
+  assert.equal(await store.hget('idx:application', 'evt_demo_edm:vol_demo_riya'), null);
+  assert.equal(JSON.parse(await store.hget('events', 'evt_demo_hackathon')).status, 'cancelled', 'one a real volunteer applied to is kept, cancelled');
+  assert.ok(await store.hget('applications', 'app_real'));
+  assert.equal((await a('GET', '/events')).total, 12);
 });
 
 test('demo account can apply where storage is kept (local SQLite)', async () => {

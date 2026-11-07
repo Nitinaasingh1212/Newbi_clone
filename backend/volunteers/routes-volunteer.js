@@ -5,6 +5,9 @@ import { checkOtp, issueOtp } from './otp.js';
 import { keyedHash, signToken } from './tokens.js';
 import { applicationView, byEventDate, eventCounts, eventView, volunteerView } from './service.js';
 import {
+  AVAILABILITY,
+  DEPARTMENTS,
+  EXPERIENCE_LEVELS,
   GENDERS,
   HttpError,
   aadhaarNumber,
@@ -21,7 +24,10 @@ import {
   text,
 } from './validate.js';
 
-const REGISTER_FIELDS = ['name', 'aadhaarNumber', 'dateOfBirth', 'gender', 'city', 'area', 'email', 'skills', 'languages', 'emergencyContact'];
+const REGISTER_FIELDS = [
+  'name', 'aadhaarNumber', 'dateOfBirth', 'gender', 'city', 'area', 'email', 'department', 'experience', 'availability',
+  'skills', 'languages', 'emergencyContact',
+];
 const PROFILE_FIELDS = REGISTER_FIELDS;
 // Changing these after the coordination team has verified the Aadhaar would undo that check.
 const KYC_FIELDS = ['name', 'dateOfBirth', 'aadhaarNumber'];
@@ -115,6 +121,9 @@ export function volunteerRoutes(define, svc) {
         gender: oneOf(body.gender, 'gender', GENDERS),
         ...cityField(body.city, { required: true }),
         area: text(body.area, 'area', { max: 80 }),
+        department: oneOf(body.department, 'department', DEPARTMENTS),
+        experience: oneOf(body.experience, 'experience', EXPERIENCE_LEVELS),
+        availability: oneOf(body.availability, 'availability', AVAILABILITY),
         skills: stringList(body.skills, 'skills'),
         languages: stringList(body.languages, 'languages', { maxItems: 10 }),
         emergencyContact: emergencyContact(body.emergencyContact),
@@ -164,6 +173,9 @@ export function volunteerRoutes(define, svc) {
     if ('gender' in body) v.gender = oneOf(body.gender, 'gender', GENDERS);
     if ('city' in body) Object.assign(v, cityField(body.city, { required: true }));
     if ('area' in body) v.area = text(body.area, 'area', { max: 80 });
+    if ('department' in body) v.department = oneOf(body.department, 'department', DEPARTMENTS);
+    if ('experience' in body) v.experience = oneOf(body.experience, 'experience', EXPERIENCE_LEVELS);
+    if ('availability' in body) v.availability = oneOf(body.availability, 'availability', AVAILABILITY);
     if ('skills' in body) v.skills = stringList(body.skills, 'skills');
     if ('languages' in body) v.languages = stringList(body.languages, 'languages', { maxItems: 10 });
     if ('emergencyContact' in body) v.emergencyContact = emergencyContact(body.emergencyContact);

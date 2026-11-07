@@ -11,9 +11,7 @@ const PORT = Number(process.env.PORT) || 3000;
 
 // Pages with an id in the path. vercel.json has the same rewrites.
 const REWRITES = [
-  [/^\/events\/[^/]+\/book\/?$/, 'events/book.html'],
   [/^\/events\/[^/]+\/?$/, 'events/event.html'],
-  [/^\/bookings\/[^/]+\/?$/, 'bookings/index.html'],
 ];
 
 const TYPES = {

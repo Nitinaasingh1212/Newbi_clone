@@ -9,16 +9,8 @@
       "destination": "/api/v1?__path=:path*"
     },
     {
-      "source": "/events/:id/book",
-      "destination": "/events/book.html"
-    },
-    {
       "source": "/events/:id",
       "destination": "/events/event.html"
-    },
-    {
-      "source": "/bookings/:id",
-      "destination": "/bookings/index.html"
     }
   ]
 }

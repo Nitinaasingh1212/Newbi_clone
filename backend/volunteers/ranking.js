@@ -1,6 +1,6 @@
 // Volunteer ranking. Every event a volunteer completes earns points, the coordinator's
 // 1-5 star rating for that event adds or removes a bonus, and a no-show costs points.
-// Tiers and leaderboard order follow from the total. Tune the numbers in RANKING.
+// Tiers (New Joiner -> Trained -> Experienced -> 5-Star Elite) and leaderboard order follow from the total. Tune the numbers in RANKING.
 
 export const RANKING = {
   pointsPerCompletedEvent: 10,
@@ -8,10 +8,10 @@ export const RANKING = {
   noShowPenalty: 15,
   tiers: [
     // highest first
-    { name: 'Platinum', minPoints: 300 },
-    { name: 'Gold', minPoints: 150 },
-    { name: 'Silver', minPoints: 50 },
-    { name: 'Bronze', minPoints: 0 },
+    { name: '5-Star Elite', minPoints: 300, about: 'Outstanding performance and leadership' },
+    { name: 'Experienced', minPoints: 150, about: 'Consistent, reliable event crew' },
+    { name: 'Trained', minPoints: 50, about: 'Completed basic event training' },
+    { name: 'New Joiner', minPoints: 0, about: 'Newly registered volunteer' },
   ],
 };
 

@@ -1,14 +1,20 @@
-// Endpoints used by everyone: service health, the city list, ranking rules and the leaderboard.
+// Endpoints used by everyone: service health, form options, the city list, ranking rules
+// and the leaderboard.
 import { configProblem } from './config.js';
 import { rankVolunteers, rankingRules } from './ranking.js';
-import { cityField, integer } from './validate.js';
+import { shortName } from './service.js';
+import {
+  AVAILABILITY,
+  CATEGORIES,
+  DEPARTMENTS,
+  EXPERIENCE_LEVELS,
+  FEEDBACK_CATEGORIES,
+  NETWORK_CITIES,
+  VENDOR_CATEGORIES,
+  cityField,
+  integer,
+} from './validate.js';
 import { DEMO_LOGIN } from './demo-data.js';
-
-// "Rahul Kumar Sharma" -> "Rahul S." so volunteers don't see each other's full names.
-const shortName = (name) => {
-  const parts = name.split(' ');
-  return parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1][0]}.` : name;
-};
 
 export function commonRoutes(define, svc) {
   const { config, db, store } = svc;
@@ -44,6 +50,16 @@ export function commonRoutes(define, svc) {
       warnings,
     };
   });
+
+  define('GET', '/options', { open: true, summary: 'Choice lists for the site forms (categories, departments, cities, ...)' }, () => ({
+    categories: CATEGORIES,
+    networkCities: NETWORK_CITIES,
+    departments: DEPARTMENTS,
+    experienceLevels: EXPERIENCE_LEVELS,
+    availability: AVAILABILITY,
+    vendorCategories: VENDOR_CATEGORIES,
+    feedbackCategories: FEEDBACK_CATEGORIES,
+  }));
 
   define(
     'GET',

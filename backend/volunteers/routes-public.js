@@ -1,137 +1,180 @@
-// Public endpoints behind the OSH website: browsing events, booking tickets, and the
-// Organize page's enquiry form. No sign-in needed.
-import { randomBytes } from 'node:crypto';
-import { byEventDate, eventCounts, eventSummary, eventView } from './service.js';
+// Public endpoints behind the OSH website: browsing crew opportunities (events), the
+// network numbers, Star Volunteers, vendor registration and volunteer feedback. No sign-in
+// needed. OSH is a crew network, not a ticketing platform, so there are no bookings.
+import { rankVolunteers } from './ranking.js';
+import { byEventDate, eventCounts, eventView, shortName } from './service.js';
 import {
   CATEGORIES,
+  FEEDBACK_CATEGORIES,
   HttpError,
+  VENDOR_CATEGORIES,
   badRequest,
   cityField,
-  email,
+  gstin,
   indianMobile,
-  isoDate,
+  integer,
   oneOf,
   onlyFields,
   pagination,
   text,
 } from './validate.js';
 
-const EVENT_TYPES = ['College fest', 'Concert', 'Corporate event', 'Brand activation', 'Workshop / conference', 'Sports event', 'Other'];
-const AUDIENCE_SIZES = ['Under 200', '200 to 1,000', '1,000 to 5,000', 'Over 5,000'];
-const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O, 1/I
-
-function bookingCode() {
-  const bytes = randomBytes(6);
-  return 'OSH-' + [...bytes].map((b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join('');
-}
+const VENDOR_FIELDS = ['companyName', 'contactPerson', 'phone', 'city', 'category', 'gstin', 'services'];
+const FEEDBACK_FIELDS = ['category', 'name', 'message'];
 
 export function publicRoutes(define, svc) {
   const { db, store } = svc;
 
-  const bookable = (e) => e.status === 'open' && e.date >= svc.today() && (e.tickets?.length ?? 0) > 0;
-  const publicEvent = (e, applications) => ({
-    ...eventView(e, { counts: eventCounts(applications.filter((a) => a.eventId === e.id)) }),
-    bookable: bookable(e),
-  });
+  const isUpcoming = (e, today) => e.status === 'open' && e.date >= today;
   const limitPerHour = async (key, max, message) => {
     if ((await store.incrTemp(key, 3600)) > max) throw new HttpError(429, 'rate_limited', message);
   };
+  const countBy = (items, key) => items.reduce((acc, item) => acc.set(key(item), (acc.get(key(item)) ?? 0) + 1), new Map());
 
   define(
     'GET',
     '/events',
-    { open: true, summary: 'Upcoming events for the public site (?q=&category=&city=)' },
+    { open: true, summary: 'Upcoming crew opportunities (?q=&category=&city=), with counts per category and city' },
     async ({ query }) => {
       const q = (query.get('q') ?? '').trim().toLowerCase().slice(0, 80);
       const category = oneOf(query.get('category'), 'category', CATEGORIES);
       const city = cityField(query.get('city'));
       const today = svc.today();
       const [events, applications] = await Promise.all([db.all('events'), db.all('applications')]);
-      const upcoming = events.filter((e) => e.status === 'open' && e.date >= today);
+      const upcoming = events.filter((e) => isUpcoming(e, today));
       const matching = upcoming
         .filter(
           (e) =>
             (!category || e.category === category) &&
             (!city || e.cityKey === city.cityKey) &&
-            (!q || [e.title, e.description, e.venue, e.city, e.category, ...(e.tags ?? [])].join(' ').toLowerCase().includes(q)),
+            (!q || [e.title, e.description, e.venue, e.city, e.category, ...(e.tags ?? []), ...(e.roles ?? [])].join(' ').toLowerCase().includes(q)),
         )
         .sort(byEventDate);
+      const byCategory = countBy(upcoming, (e) => e.category);
+      const byCity = countBy(upcoming, (e) => e.cityKey);
+      const cityNames = new Map(upcoming.map((e) => [e.cityKey, e.city]));
       const { limit, offset } = pagination(query);
       return {
         total: matching.length,
-        categories: CATEGORIES.filter((c) => upcoming.some((e) => e.category === c)),
-        cities: [...new Map(upcoming.map((e) => [e.cityKey, e.city])).values()].sort(),
-        events: matching.slice(offset, offset + limit).map((e) => publicEvent(e, applications)),
+        categories: CATEGORIES.map((name) => ({ name, count: byCategory.get(name) ?? 0 })),
+        cities: [...byCity]
+          .map(([cityKey, count]) => ({ city: cityNames.get(cityKey), cityKey, count }))
+          .sort((a, b) => b.count - a.count || a.city.localeCompare(b.city)),
+        events: matching
+          .slice(offset, offset + limit)
+          .map((e) => eventView(e, { counts: eventCounts(applications.filter((a) => a.eventId === e.id)) })),
       };
     },
   );
 
-  define('GET', '/events/:eventId', { open: true, summary: 'One event with its ticket types and highlights' }, async ({ params }) => {
+  define('GET', '/events/:eventId', { open: true, summary: 'One event with its volunteer roles and open positions' }, async ({ params }) => {
     const event = await svc.requireDoc('events', params.eventId, 'Event');
     const applications = await svc.applicationsWhere((a) => a.eventId === event.id);
-    return { event: publicEvent(event, applications) };
+    return { event: eventView(event, { counts: eventCounts(applications) }) };
+  });
+
+  define('GET', '/stats', { open: true, summary: 'Network numbers: upcoming events, active cities, open positions, interest' }, async () => {
+    const today = svc.today();
+    const [events, applications, volunteers, vendors] = await Promise.all([
+      db.all('events'),
+      db.all('applications'),
+      db.all('volunteers'),
+      db.all('vendors'),
+    ]);
+    const upcoming = events.filter((e) => isUpcoming(e, today));
+    const upcomingIds = new Set(upcoming.map((e) => e.id));
+    return {
+      upcomingEvents: upcoming.length,
+      activeCities: new Set(upcoming.map((e) => e.cityKey)).size,
+      volunteerPositions: upcoming.reduce((sum, e) => sum + e.volunteersNeeded, 0),
+      interestResponses: applications.filter((a) => upcomingIds.has(a.eventId) && a.status !== 'withdrawn').length,
+      volunteers: volunteers.filter((v) => v.status === 'active').length,
+      verifiedVendors: vendors.filter((v) => v.status === 'verified').length,
+    };
   });
 
   define(
-    'POST',
-    '/events/:eventId/bookings',
-    { open: true, status: 201, summary: 'Book a ticket: { ticketId, name, email, phone }' },
-    async ({ params, body, ip }) => {
-      onlyFields(body, ['ticketId', 'name', 'email', 'phone']);
-      const event = await svc.requireDoc('events', params.eventId, 'Event');
-      if (!bookable(event)) throw new HttpError(409, 'bookings_closed', 'Bookings for this event are closed.');
-      const ticket = event.tickets.find((t) => t.id === body.ticketId);
-      if (!ticket) throw badRequest('invalid_ticket', 'Choose a ticket type.', { field: 'ticketId' });
-      const name = text(body.name, 'name', { required: true, max: 80 });
-      if (name.length < 2) throw badRequest('invalid_field', 'Enter the attendee\'s full name.', { field: 'name' });
-      const attendee = { name, email: email(body.email, { required: true }), phone: indianMobile(body.phone) };
-      if (ip) await limitPerHour(`bookings:${ip}`, 30, 'Too many bookings from this network. Try again later.');
-
-      const booking = {
-        id: svc.newId('bkg'),
-        code: bookingCode(),
-        eventId: event.id,
-        ticket: { id: ticket.id, name: ticket.name, description: ticket.description ?? null, price: ticket.price },
-        attendee,
-        amount: ticket.price,
-        status: 'confirmed',
-        // No payment gateway is connected yet: paid bookings are confirmed without a charge.
-        payment: ticket.price > 0 ? 'simulated' : 'free',
-        createdAt: svc.nowIso(),
+    'GET',
+    '/star-volunteers',
+    { open: true, summary: 'Top-ranked volunteers across the network (first name and initial only)' },
+    async ({ query }) => {
+      const limit = integer(query.get('limit'), 'limit', { min: 1, max: 24 }) ?? 6;
+      const snapshot = await svc.rankingSnapshot();
+      const ranked = rankVolunteers(snapshot.volunteers, snapshot.statsOf);
+      return {
+        rankedVolunteers: ranked.length,
+        volunteers: ranked.slice(0, limit).map(({ volunteer, stats, rank }) => ({
+          rank,
+          name: shortName(volunteer.name),
+          city: volunteer.city,
+          department: volunteer.department ?? null,
+          verified: volunteer.kyc.status === 'verified',
+          tier: stats.tier,
+          points: stats.points,
+          completedEvents: stats.completedEvents,
+          averageRating: stats.averageRating,
+        })),
       };
-      await db.put('bookings', booking);
-      return { booking, event: eventSummary(event) };
     },
   );
 
-  define('GET', '/bookings/:bookingId', { open: true, summary: 'A booking (the id is the proof of purchase)' }, async ({ params }) => {
-    const booking = await svc.requireDoc('bookings', params.bookingId, 'Booking');
-    const event = await db.get('events', booking.eventId);
-    return { booking, event: event && eventSummary(event) };
-  });
+  define(
+    'POST',
+    '/vendors',
+    { open: true, status: 201, summary: 'Register as a vendor (verified by OSH before listing as a partner)' },
+    async ({ body, ip }) => {
+      onlyFields(body, VENDOR_FIELDS);
+      const companyName = text(body.companyName, 'companyName', { required: true, max: 100 });
+      const contactPerson = text(body.contactPerson, 'contactPerson', { required: true, max: 80 });
+      if (companyName.length < 2) throw badRequest('invalid_field', 'Enter your company or business name.', { field: 'companyName' });
+      if (contactPerson.length < 2) throw badRequest('invalid_field', "Enter the contact person's name.", { field: 'contactPerson' });
+      const now = svc.nowIso();
+      const vendor = {
+        id: svc.newId('ven'),
+        companyName,
+        contactPerson,
+        phone: indianMobile(body.phone),
+        ...cityField(body.city, { required: true }),
+        category: oneOf(body.category, 'category', VENDOR_CATEGORIES, { required: true }),
+        gstin: gstin(body.gstin),
+        services: text(body.services, 'services', { max: 1500, multiline: true }),
+        status: 'pending',
+        reviewNote: null,
+        reviewedAt: null,
+        reviewedBy: null,
+        createdAt: now,
+        updatedAt: now,
+      };
+      if (ip) await limitPerHour(`vendors:${ip}`, 10, 'Too many registrations from this network. Try again later.');
+      if (!(await store.hsetnx('idx:vendorPhone', vendor.phone, vendor.id))) {
+        throw new HttpError(409, 'vendor_exists', 'A vendor with this mobile number is already registered. The OSH team will be in touch.');
+      }
+      await db.put('vendors', vendor);
+      return { vendor: { id: vendor.id, companyName: vendor.companyName, city: vendor.city, category: vendor.category, status: vendor.status } };
+    },
+  );
 
   define(
     'POST',
-    '/organize/enquiries',
-    { open: true, status: 201, summary: 'Ask OSH to organise an event (the Organize page form)' },
+    '/feedback',
+    { open: true, status: 201, summary: 'Send feedback to OSH management (name optional; only admins can read it)' },
     async ({ body, ip }) => {
-      onlyFields(body, ['name', 'email', 'phone', 'organization', 'eventType', 'city', 'eventDate', 'audience', 'message']);
-      const enquiry = {
-        id: svc.newId('enq'),
-        name: text(body.name, 'name', { required: true, max: 80 }),
-        email: email(body.email, { required: true }),
-        phone: indianMobile(body.phone),
-        organization: text(body.organization, 'organization', { max: 100 }),
-        eventType: oneOf(body.eventType, 'eventType', EVENT_TYPES, { required: true }),
-        ...(cityField(body.city) ?? { city: null, cityKey: null }),
-        eventDate: isoDate(body.eventDate, 'eventDate'),
-        audience: oneOf(body.audience, 'audience', AUDIENCE_SIZES),
-        message: text(body.message, 'message', { required: true, max: 1500, multiline: true }),
+      onlyFields(body, FEEDBACK_FIELDS);
+      const message = text(body.message, 'message', { required: true, max: 2000, multiline: true });
+      if (message.length < 10) throw badRequest('invalid_field', 'Tell us a little more (at least 10 characters).', { field: 'message' });
+      const feedback = {
+        id: svc.newId('fbk'),
+        category: oneOf(body.category, 'category', FEEDBACK_CATEGORIES, { required: true }),
+        name: text(body.name, 'name', { max: 80 }),
+        message,
+        status: 'new',
         createdAt: svc.nowIso(),
+        resolvedAt: null,
+        resolvedBy: null,
       };
-      if (ip) await limitPerHour(`enquiries:${ip}`, 10, 'Too many enquiries from this network. Try again later.');
-      await db.put('enquiries', enquiry);
-      return { enquiry: { id: enquiry.id, receivedAt: enquiry.createdAt } };
+      if (ip) await limitPerHour(`feedback:${ip}`, 10, 'Too many messages from this network. Try again later.');
+      await db.put('feedback', feedback);
+      return { feedback: { id: feedback.id, receivedAt: feedback.createdAt } };
     },
   );
 }
